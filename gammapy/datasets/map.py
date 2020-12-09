@@ -429,9 +429,9 @@ class MapDataset(Dataset):
     def from_geoms(
         cls,
         geom,
-        geom_exposure=None,
-        geom_psf=None,
-        geom_edisp=None,
+        geom_exposure,
+        geom_psf,
+        geom_edisp,
         reference_time="2000-01-01",
         name=None,
         **kwargs,
@@ -472,9 +472,7 @@ class MapDataset(Dataset):
         else:
             kwargs["edisp"] = EDispMap.from_geom(geom_edisp)
 
-        # TODO: allow PSF as well...
-        if geom_psf and not geom_psf.is_region:
-            kwargs["psf"] = PSFMap.from_geom(geom_psf)
+        kwargs["psf"] = PSFMap.from_geom(geom_psf)
 
         kwargs.setdefault(
             "gti", GTI.create([] * u.s, [] * u.s, reference_time=reference_time)
@@ -1798,8 +1796,8 @@ class MapDatasetOnOff(MapDataset):
         cls,
         geom,
         geom_exposure,
-        geom_psf=None,
-        geom_edisp=None,
+        geom_psf,
+        geom_edisp,
         reference_time="2000-01-01",
         name=None,
         **kwargs,
@@ -1842,9 +1840,7 @@ class MapDatasetOnOff(MapDataset):
         else:
             kwargs["edisp"] = EDispMap.from_geom(geom_edisp)
 
-        if geom_psf and not geom_psf.is_region:
-            kwargs["psf"] = PSFMap.from_geom(geom_psf)
-
+        kwargs["psf"] = PSFMap.from_geom(geom_psf)
         kwargs["gti"] = GTI.create([] * u.s, [] * u.s, reference_time=reference_time)
         kwargs["mask_safe"] = Map.from_geom(geom, dtype=bool)
 
@@ -2546,7 +2542,8 @@ class MapEvaluator:
                 geom = exposure.geom
 
             if geom.is_region:
-                geom = geom.to_wcs_geom()
+                # Here we can use a larger geom, as the size is given by the PSF
+                geom = geom.to_wcs_geom(width_min="15 deg")
 
             self.psf = psf.get_psf_kernel(position=self.model.position, geom=geom)
 
@@ -2610,13 +2607,14 @@ class MapEvaluator:
             Psf-corrected, integrated flux over a given region.
         """
         if self.geom.is_region:
-            wcs_geom = self.geom.to_wcs_geom()
-            mask = self.geom.contains(wcs_geom.get_coord())
+            wcs_geom = self.geom.to_wcs_geom(width_min=self.cutout_width).to_image()
             values = self.model.spatial_model.integrate_geom(wcs_geom)
 
             if self.psf and self.model.apply_irf["psf"]:
                 values = self.apply_psf(values)
-            value = (values.quantity * mask).sum(axis=(1, 2))
+
+            mask = self.geom.contains(wcs_geom.get_coord())
+            value = (values.quantity * mask).sum(axis=(1, 2), keepdims=True)
 
         else:
             value = self.model.spatial_model.integrate_geom(self.geom)

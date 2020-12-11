@@ -305,6 +305,8 @@ class MapDataset(Dataset):
                         use_cache=USE_NPRED_CACHE,
                     )
                     self._evaluators[model.name] = evaluator
+                    # setup evaluator
+                    evaluator.compute_npred()
 
         self._models = models
 
@@ -2613,8 +2615,8 @@ class MapEvaluator:
             if self.psf and self.model.apply_irf["psf"]:
                 values = self.apply_psf(values)
 
-            mask = self.geom.contains(wcs_geom.get_coord())
-            value = (values.quantity * mask).sum(axis=(1, 2), keepdims=True)
+            weights = wcs_geom.region_weights(regions=[self.geom.region])
+            value = (values.quantity * weights).sum(axis=(1, 2), keepdims=True)
 
         else:
             value = self.model.spatial_model.integrate_geom(self.geom)

@@ -291,7 +291,9 @@ class EDispMap(IRFMap):
                 axis=axis,
             )
 
-            integral = np.diff(np.clip(f(migra), a_min=0, a_max=1), axis=axis)
+            with np.errstate(over="ignore"):
+                integral = np.diff(np.clip(f(migra), a_min=0, a_max=1), axis=axis)
+
             data.append(integral)
 
         data = np.stack(data)

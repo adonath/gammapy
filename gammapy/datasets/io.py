@@ -9,7 +9,7 @@ from gammapy.data import GTI
 from gammapy.utils.scripts import make_path
 from gammapy.maps import RegionNDMap
 from gammapy.irf import EDispKernelMap, EDispKernel
-from .spectrum import SpectrumDatasetOnOff
+from .spectrum import SpectrumDatasetOnOff, MapDatasetOnOff
 
 
 class DatasetReader(abc.ABC):
@@ -28,6 +28,12 @@ class DatasetReader(abc.ABC):
 class DatasetWriter(abc.ABC):
     """Dataset writer base class"""
 
+    def __init__(self, filename, overwrite=False):
+        filename = make_path(filename)
+        filename.parent.mkdir(exist_ok=True, parents=True)
+        self.filename = filename
+        self.overwrite = overwrite
+
     @property
     @abc.abstractmethod
     def tag(self):
@@ -36,6 +42,86 @@ class DatasetWriter(abc.ABC):
     @abc.abstractmethod
     def write(self, dataset):
         pass
+
+
+class GADFDatasetWriter(DatasetWriter):
+    """Write single GADF FITS file.
+
+    Parameters
+    ----------
+    filename : `pathlib.Path` or str
+        Filename.
+    overwrite : bool
+        Overwrite existing files?
+    """
+    tag = "gadf"
+
+    @staticmethod
+    def to_hdulist(dataset):
+        """Convert map dataset to list of HDUs.
+
+        Parameters
+        ----------
+        dataset : `MapDataset` or `MapDatasetOnOff`
+            Map dataset.
+
+        Returns
+        -------
+        hdulist : `~astropy.io.fits.HDUList`
+            Map dataset list of HDUs.
+        """
+        exclude_primary = slice(1, None)
+        hdu_primary = fits.PrimaryHDU()
+        hdulist = fits.HDUList([hdu_primary])
+
+        if dataset.counts is not None:
+            hdulist += dataset.counts.to_hdulist(hdu="counts")[exclude_primary]
+
+        if dataset.exposure is not None:
+            hdulist += dataset.exposure.to_hdulist(hdu="exposure")[exclude_primary]
+
+        if dataset.background is not None and not isinstance(dataset, MapDatasetOnOff):
+            hdulist += dataset.background.to_hdulist(hdu="background")[exclude_primary]
+
+        if dataset.edisp is not None:
+            hdulist += dataset.edisp.to_hdulist()[exclude_primary]
+
+        if dataset.psf is not None:
+            hdulist += dataset.psf.to_hdulist()[exclude_primary]
+
+        if dataset.mask_safe is not None:
+            hdulist += dataset.mask_safe.to_hdulist(hdu="mask_safe")[exclude_primary]
+
+        if dataset.mask_fit is not None:
+            hdulist += dataset.mask_fit.to_hdulist(hdu="mask_fit")[exclude_primary]
+
+        if dataset.gti is not None:
+            hdulist.append(fits.BinTableHDU(dataset.gti.table, name="GTI"))
+
+        if isinstance(dataset, MapDatasetOnOff):
+            if dataset.counts_off is not None:
+                hdulist += dataset.counts_off.to_hdulist(hdu="counts_off")[exclude_primary]
+
+            if dataset.acceptance is not None:
+                hdulist += dataset.acceptance.to_hdulist(hdu="acceptance")[exclude_primary]
+
+            if dataset.acceptance_off is not None:
+                hdulist += dataset.acceptance_off.to_hdulist(hdu="acceptance_off")[
+                    exclude_primary
+                ]
+
+        return hdulist
+
+    def write(self, dataset):
+        """Write dataset to file.
+
+        Parameters
+        ----------
+        dataset : `MapDataset`
+            Map dataset.
+        """
+        hdulist = self.to_hdulist(dataset)
+        hdulist.writeto(self.filename, overwrite=self.overwrite)
 
 
 class OGIPDatasetWriter(DatasetWriter):
@@ -64,12 +150,8 @@ class OGIPDatasetWriter(DatasetWriter):
     tag = ["ogip", "ogip-sherpa"]
 
     def __init__(self, filename, format="ogip", overwrite=False):
-        filename = make_path(filename)
-        filename.parent.mkdir(exist_ok=True, parents=True)
-
-        self.filename = filename
         self.format = format
-        self.overwrite = overwrite
+        super().__init__(filename=filename, overwrite=overwrite)
 
     @staticmethod
     def get_filenames(filename):

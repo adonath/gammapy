@@ -908,36 +908,9 @@ class MapDataset(Dataset):
         hdulist : `~astropy.io.fits.HDUList`
             Map dataset list of HDUs.
         """
-        # TODO: what todo about the model and background model parameters?
-        exclude_primary = slice(1, None)
+        from .io import GADFDatasetWriter
 
-        hdu_primary = fits.PrimaryHDU()
-        hdulist = fits.HDUList([hdu_primary])
-        if self.counts is not None:
-            hdulist += self.counts.to_hdulist(hdu="counts")[exclude_primary]
-
-        if self.exposure is not None:
-            hdulist += self.exposure.to_hdulist(hdu="exposure")[exclude_primary]
-
-        if self.background is not None:
-            hdulist += self.background.to_hdulist(hdu="background")[exclude_primary]
-
-        if self.edisp is not None:
-            hdulist += self.edisp.to_hdulist()[exclude_primary]
-
-        if self.psf is not None:
-            hdulist += self.psf.to_hdulist()[exclude_primary]
-
-        if self.mask_safe is not None:
-            hdulist += self.mask_safe.to_hdulist(hdu="mask_safe")[exclude_primary]
-
-        if self.mask_fit is not None:
-            hdulist += self.mask_fit.to_hdulist(hdu="mask_fit")[exclude_primary]
-
-        if self.gti is not None:
-            hdulist.append(fits.BinTableHDU(self.gti.table, name="GTI"))
-
-        return hdulist
+        return GADFDatasetWriter.to_hdulist(self)
 
     @classmethod
     def from_hdulist(cls, hdulist, name=None, lazy=False):
@@ -1017,7 +990,11 @@ class MapDataset(Dataset):
         overwrite : bool
             Overwrite file if it exists.
         """
-        self.to_hdulist().writeto(str(make_path(filename)), overwrite=overwrite)
+        from .io import GADFDatasetWriter
+
+        # TODO: use registry system here to get the writer of a given format
+        writer = GADFDatasetWriter(filename=filename, overwrite=overwrite)
+        writer.write(self)
 
     @classmethod
     def _read_lazy(cls, name, filename, cache):
@@ -2014,33 +1991,6 @@ class MapDatasetOnOff(MapDataset):
         npred_off = npred_background / self.alpha
         npred_off.data = random_state.poisson(npred_off.data)
         self.counts_off = npred_off
-
-    def to_hdulist(self):
-        """Convert map dataset to list of HDUs.
-
-        Returns
-        -------
-        hdulist : `~astropy.io.fits.HDUList`
-            Map dataset list of HDUs.
-        """
-        hdulist = super().to_hdulist()
-        exclude_primary = slice(1, None)
-
-        del hdulist["BACKGROUND"]
-        del hdulist["BACKGROUND_BANDS"]
-
-        if self.counts_off is not None:
-            hdulist += self.counts_off.to_hdulist(hdu="counts_off")[exclude_primary]
-
-        if self.acceptance is not None:
-            hdulist += self.acceptance.to_hdulist(hdu="acceptance")[exclude_primary]
-
-        if self.acceptance_off is not None:
-            hdulist += self.acceptance_off.to_hdulist(hdu="acceptance_off")[
-                exclude_primary
-            ]
-
-        return hdulist
 
     @classmethod
     def from_hdulist(cls, hdulist, name=None):

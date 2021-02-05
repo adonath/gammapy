@@ -99,6 +99,11 @@ class GTI:
         table = Table.read(filename, hdu=hdu)
         return cls(table)
 
+    def to_hdulist(self, hdu=None):
+        """To hdu list"""
+        hdu = fits.BinTableHDU(self.table, name=hdu)
+        return fits.HDUList([fits.PrimaryHDU(), hdu])
+
     def write(self, filename, **kwargs):
         """Write to file.
 
@@ -107,8 +112,7 @@ class GTI:
         filename : str or `Path`
             File name to write to.
         """
-        hdu = fits.BinTableHDU(self.table, name="GTI")
-        hdulist = fits.HDUList([fits.PrimaryHDU(), hdu])
+        hdulist = self.to_hdulist(name="GTI")
         hdulist.writeto(make_path(filename), **kwargs)
 
     def __str__(self):

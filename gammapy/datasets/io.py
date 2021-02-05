@@ -7,13 +7,19 @@ from astropy.io import fits
 from astropy.table import Table
 from gammapy.data import GTI
 from gammapy.utils.scripts import make_path
+from gammapy.utils.fits import HDULocation
 from gammapy.maps import RegionNDMap
 from gammapy.irf import EDispKernelMap, EDispKernel
-from .spectrum import SpectrumDatasetOnOff, MapDatasetOnOff
+from .spectrum import SpectrumDatasetOnOff, MapDatasetOnOff, MapDataset
 
 
 class DatasetReader(abc.ABC):
     """Dataset reader base class"""
+
+    def __init__(self, filename, name=None, lazy=True, cache=True):
+        self.cache = cache
+        self.name = name
+        self.filename = make_path(filename)
 
     @property
     @abc.abstractmethod
@@ -56,6 +62,20 @@ class GADFDatasetWriter(DatasetWriter):
     """
     tag = "gadf"
 
+    hdu_names = {
+        "counts": "counts",
+        "exposure": "exposure",
+        "background": "background",
+        "edisp": "edisp",
+        "psf": "psf",
+        "mask_safe": "mask_safe",
+        "mask_fit": "mask_fit",
+        "gti": "GTI",
+        "counts_off": "counts_off",
+        "acceptance": "acceptance",
+        "acceptance_off": "acceptance_off",
+    }
+
     @staticmethod
     def to_hdulist(dataset):
         """Convert map dataset to list of HDUs.
@@ -74,41 +94,21 @@ class GADFDatasetWriter(DatasetWriter):
         hdu_primary = fits.PrimaryHDU()
         hdulist = fits.HDUList([hdu_primary])
 
-        if dataset.counts is not None:
-            hdulist += dataset.counts.to_hdulist(hdu="counts")[exclude_primary]
+        for name, hdu in GADFDatasetWriter.hdu_names.items():
+            data = getattr(dataset, name, None)
 
-        if dataset.exposure is not None:
-            hdulist += dataset.exposure.to_hdulist(hdu="exposure")[exclude_primary]
+            if data is None:
+                continue
 
-        if dataset.background is not None and not isinstance(dataset, MapDatasetOnOff):
-            hdulist += dataset.background.to_hdulist(hdu="background")[exclude_primary]
-
-        if dataset.edisp is not None:
-            hdulist += dataset.edisp.to_hdulist()[exclude_primary]
-
-        if dataset.psf is not None:
-            hdulist += dataset.psf.to_hdulist()[exclude_primary]
-
-        if dataset.mask_safe is not None:
-            hdulist += dataset.mask_safe.to_hdulist(hdu="mask_safe")[exclude_primary]
-
-        if dataset.mask_fit is not None:
-            hdulist += dataset.mask_fit.to_hdulist(hdu="mask_fit")[exclude_primary]
-
-        if dataset.gti is not None:
-            hdulist.append(fits.BinTableHDU(dataset.gti.table, name="GTI"))
+            try:
+                hdulist += data.to_hdulist(hdu=hdu)[exclude_primary]
+            except TypeError:
+                hdulist += data.to_hdulist()[exclude_primary]
 
         if isinstance(dataset, MapDatasetOnOff):
-            if dataset.counts_off is not None:
-                hdulist += dataset.counts_off.to_hdulist(hdu="counts_off")[exclude_primary]
-
-            if dataset.acceptance is not None:
-                hdulist += dataset.acceptance.to_hdulist(hdu="acceptance")[exclude_primary]
-
-            if dataset.acceptance_off is not None:
-                hdulist += dataset.acceptance_off.to_hdulist(hdu="acceptance_off")[
-                    exclude_primary
-                ]
+            # TODO: handle hard code hdu names...
+            del hdulist["BACKGROUND"]
+            del hdulist["BACKGROUND_BANDS"]
 
         return hdulist
 
@@ -122,6 +122,69 @@ class GADFDatasetWriter(DatasetWriter):
         """
         hdulist = self.to_hdulist(dataset)
         hdulist.writeto(self.filename, overwrite=self.overwrite)
+
+
+class GADFMapDatasetReader(DatasetReader):
+    """Read MapDataet in gadf format
+
+    Parameters
+    ----------
+    filename : str
+        Filename to read from.
+    name : str
+        Name of the new dataset.
+    cache : bool
+        Whether to cache the data after loading.
+
+    """
+    tag = "gadf"
+
+    hdu_classes = {
+        "counts": "map",
+        "exposure": "map",
+        "background": "map",
+        "edisp": "edisp_kernel_map",
+        "psf": "psf_map",
+        "mask_safe": "map",
+        "mask_fit": "map",
+        "gti": "gti"
+    }
+    
+    def get_hdu_locations(self):
+        """"""
+        kwargs = {"name": self.name}
+
+        for name, hdu_class in GADFDatasetWriter.hdu_names.items():
+            hdu_class = self.hdu_classes[name]
+            kwargs[name] = HDULocation(
+                hdu_class=hdu_class,
+                file_dir=self.filename.parent,
+                file_name=self.filename.name,
+                hdu_name=hdu_name.upper(),
+                cache=self.cache,
+            )
+
+        return kwargs
+
+    def read(self):
+        """Read dataset
+
+        Returns
+        -------
+        dataset : `MapDataset` or `MapDatasetOnOff`
+            Map dataset
+        """
+        kwargs = self.get_hdu_locations()
+        return MapDataset(**kwargs)
+
+
+class GADFMapDatasetOnOffReader(GADFMapDatasetReader):
+    tag = "gadf"
+
+    def read(self):
+        """"""
+        kwargs = self.get_hdu_locations()
+        return MapDatasetOnOff(**kwargs)
 
 
 class OGIPDatasetWriter(DatasetWriter):
@@ -350,9 +413,6 @@ class OGIPDatasetReader(DatasetReader):
         OGIP PHA file to read
     """
     tag = "ogip"
-
-    def __init__(self, filename):
-        self.filename = make_path(filename)
 
     def get_valid_path(self, filename):
         """Get absolute or relative path

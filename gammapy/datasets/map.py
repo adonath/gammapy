@@ -3,9 +3,7 @@ import logging
 from functools import lru_cache
 import numpy as np
 import astropy.units as u
-from astropy.io import fits
 from astropy.nddata.utils import NoOverlapError
-from astropy.table import Table
 from astropy.utils import lazyproperty
 from regions import CircleSkyRegion
 from gammapy.data import GTI
@@ -148,6 +146,7 @@ class MapDataset(Dataset):
     psf = LazyFitsData(cache=True)
     mask_fit = LazyFitsData(cache=True)
     mask_safe = LazyFitsData(cache=True)
+    gti = LazyFitsData(cache=True)
 
     _lazy_data_members = [
         "counts",
@@ -900,6 +899,7 @@ class MapDataset(Dataset):
         npred.data = random_state.poisson(npred.data)
         self.counts = npred
 
+    # TODO: maybe remove this?
     def to_hdulist(self):
         """Convert map dataset to list of HDUs.
 
@@ -912,6 +912,7 @@ class MapDataset(Dataset):
 
         return GADFDatasetWriter.to_hdulist(self)
 
+    # TODO: maybe remove this?
     @classmethod
     def from_hdulist(cls, hdulist, name=None, lazy=False):
         """Create map dataset from list of HDUs.
@@ -928,55 +929,6 @@ class MapDataset(Dataset):
         dataset : `MapDataset`
             Map dataset.
         """
-        name = make_name(name)
-        kwargs = {"name": name}
-
-        if "COUNTS" in hdulist:
-            kwargs["counts"] = Map.from_hdulist(hdulist, hdu="counts")
-
-        if "EXPOSURE" in hdulist:
-            exposure = Map.from_hdulist(hdulist, hdu="exposure")
-            if exposure.geom.axes[0].name == "energy":
-                exposure.geom.axes[0].name = "energy_true"
-            kwargs["exposure"] = exposure
-
-        if "BACKGROUND" in hdulist:
-            kwargs["background"] = Map.from_hdulist(hdulist, hdu="background")
-
-        if "EDISP" in hdulist:
-            edisp_map = Map.from_hdulist(hdulist, hdu="edisp")
-
-            try:
-                exposure_map = Map.from_hdulist(hdulist, hdu="edisp_exposure")
-            except KeyError:
-                exposure_map = None
-
-            if edisp_map.geom.axes[0].name == "energy":
-                kwargs["edisp"] = EDispKernelMap(edisp_map, exposure_map)
-            else:
-                kwargs["edisp"] = EDispMap(edisp_map, exposure_map)
-
-        if "PSF" in hdulist:
-            psf_map = Map.from_hdulist(hdulist, hdu="psf")
-            try:
-                exposure_map = Map.from_hdulist(hdulist, hdu="psf_exposure")
-            except KeyError:
-                exposure_map = None
-            kwargs["psf"] = PSFMap(psf_map, exposure_map)
-
-        if "MASK_SAFE" in hdulist:
-            mask_safe = Map.from_hdulist(hdulist, hdu="mask_safe")
-            mask_safe.data = mask_safe.data.astype(bool)
-            kwargs["mask_safe"] = mask_safe
-
-        if "MASK_FIT" in hdulist:
-            mask_fit = Map.from_hdulist(hdulist, hdu="mask_fit")
-            mask_fit.data = mask_fit.data.astype(bool)
-            kwargs["mask_fit"] = mask_fit
-
-        if "GTI" in hdulist:
-            gti = GTI(Table.read(hdulist, hdu="GTI"))
-            kwargs["gti"] = gti
 
         return cls(**kwargs)
 
@@ -995,42 +947,6 @@ class MapDataset(Dataset):
         # TODO: use registry system here to get the writer of a given format
         writer = GADFDatasetWriter(filename=filename, overwrite=overwrite)
         writer.write(self)
-
-    @classmethod
-    def _read_lazy(cls, name, filename, cache):
-        kwargs = {"name": name}
-        try:
-            kwargs["gti"] = GTI.read(filename)
-        except KeyError:
-            pass
-
-        path = make_path(filename)
-        for hdu_name in ["counts", "exposure", "mask_fit", "mask_safe", "background"]:
-            kwargs[hdu_name] = HDULocation(
-                hdu_class="map",
-                file_dir=path.parent,
-                file_name=path.name,
-                hdu_name=hdu_name.upper(),
-                cache=cache,
-            )
-
-        kwargs["edisp"] = HDULocation(
-            hdu_class="edisp_kernel_map",
-            file_dir=path.parent,
-            file_name=path.name,
-            hdu_name="EDISP",
-            cache=cache,
-        )
-
-        kwargs["psf"] = HDULocation(
-            hdu_class="psf_map",
-            file_dir=path.parent,
-            file_name=path.name,
-            hdu_name="PSF",
-            cache=cache,
-        )
-
-        return cls(**kwargs)
 
     @classmethod
     def read(cls, filename, name=None, lazy=False, cache=True):
@@ -1052,13 +968,11 @@ class MapDataset(Dataset):
         dataset : `MapDataset`
             Map dataset.
         """
-        name = make_name(name)
-
-        if lazy:
-            return cls._read_lazy(name=name, filename=filename, cache=cache)
-        else:
-            with fits.open(str(make_path(filename)), memmap=False) as hdulist:
-                return cls.from_hdulist(hdulist, name=name)
+        from .io import GADFDatasetReader
+        reader = GADFDatasetReader(
+            filename=filename, name=name, lazy=lazy, cache=cache
+        )
+        return reader.read()
 
     @classmethod
     def from_dict(cls, data, lazy=False, cache=True):
@@ -1617,6 +1531,10 @@ class MapDatasetOnOff(MapDataset):
     stat_type = "wstat"
     tag = "MapDatasetOnOff"
 
+    counts_off = LazyFitsData(cache=True)
+    acceptance = LazyFitsData(cache=True)
+    acceptance_off = LazyFitsData(cache=True)
+
     def __init__(
         self,
         models=None,
@@ -1991,55 +1909,6 @@ class MapDatasetOnOff(MapDataset):
         npred_off = npred_background / self.alpha
         npred_off.data = random_state.poisson(npred_off.data)
         self.counts_off = npred_off
-
-    @classmethod
-    def from_hdulist(cls, hdulist, name=None):
-        """Create map dataset from list of HDUs.
-
-        Parameters
-        ----------
-        hdulist : `~astropy.io.fits.HDUList`
-            List of HDUs.
-        name : str
-            Name of the new dataset.
-
-        Returns
-        -------
-        dataset : `MapDataset`
-            Map dataset.
-        """
-        kwargs = {}
-        kwargs["name"] = name
-
-        if "COUNTS" in hdulist:
-            kwargs["counts"] = Map.from_hdulist(hdulist, hdu="counts")
-
-        if "COUNTS_OFF" in hdulist:
-            kwargs["counts_off"] = Map.from_hdulist(hdulist, hdu="counts_off")
-
-        if "ACCEPTANCE" in hdulist:
-            kwargs["acceptance"] = Map.from_hdulist(hdulist, hdu="acceptance")
-
-        if "ACCEPTANCE_OFF" in hdulist:
-            kwargs["acceptance_off"] = Map.from_hdulist(hdulist, hdu="acceptance_off")
-
-        if "EXPOSURE" in hdulist:
-            kwargs["exposure"] = Map.from_hdulist(hdulist, hdu="exposure")
-
-        # TODO: this misses the PSFMap and EDispMap
-
-        if "MASK_SAFE" in hdulist:
-            mask_safe = Map.from_hdulist(hdulist, hdu="mask_safe")
-            kwargs["mask_safe"] = mask_safe
-
-        if "MASK_FIT" in hdulist:
-            mask_fit = Map.from_hdulist(hdulist, hdu="mask_fit")
-            kwargs["mask_fit"] = mask_fit
-
-        if "GTI" in hdulist:
-            gti = GTI(Table.read(hdulist, hdu="GTI"))
-            kwargs["gti"] = gti
-        return cls(**kwargs)
 
     def info_dict(self, in_safe_data_range=True):
         """Basic info dict with summary statistics

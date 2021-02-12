@@ -49,47 +49,6 @@ class EDispKernel(IRF):
     interpolate"""
 
     @classmethod
-    def from_gauss(cls, energy_axis_true, energy_axis, sigma, bias, pdf_threshold=1e-6):
-        """Create Gaussian energy dispersion matrix (`EnergyDispersion`).
-
-        Calls :func:`gammapy.irf.EnergyDispersion2D.from_gauss`
-
-        Parameters
-        ----------
-        energy_axis_true : `~astropy.units.Quantity`
-            Bin edges of true energy axis
-        energy_axis : `~astropy.units.Quantity`
-            Bin edges of reconstructed energy axis
-        bias : float or `~numpy.ndarray`
-            Center of Gaussian energy dispersion, bias
-        sigma : float or `~numpy.ndarray`
-            RMS width of Gaussian energy dispersion, resolution
-        pdf_threshold : float, optional
-            Zero suppression threshold
-
-        Returns
-        -------
-        edisp : `EDispKernel`
-            Edisp kernel.
-        """
-        from .energy_dispersion import EnergyDispersion2D
-
-        migra_axis = MapAxis.from_bounds(1.0 / 3, 3, nbin=200, name="migra")
-
-        # A dummy offset axis (need length 2 for interpolation to work)
-        offset_axis = MapAxis.from_edges([0, 1, 2], unit="deg", name="offset")
-
-        edisp = EnergyDispersion2D.from_gauss(
-            energy_axis_true=energy_axis_true,
-            migra_axis=migra_axis,
-            offset_axis=offset_axis,
-            sigma=sigma,
-            bias=bias,
-            pdf_threshold=pdf_threshold,
-        )
-        return edisp.to_edisp_kernel(offset=offset_axis.center[0], energy=energy_axis.edges)
-
-    @classmethod
     def from_diagonal_response(cls, energy_axis_true, energy_axis=None):
         """Create energy dispersion from a diagonal response, i.e. perfect energy resolution
 

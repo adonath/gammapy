@@ -272,7 +272,7 @@ def test_edispkernel_from_1d():
         "0.1 TeV", "10 TeV", nbin=11, name="energy"
     )
 
-    edisp = EDispKernel.from_gauss(energy_axis_true, energy_axis, 0.1, 0.0)
+    edisp = EDispKernelMap.from_gauss(energy_axis, energy_axis_true, 0.1, 0.0).get_edisp_kernel()
 
     geom = RegionGeom.create("fk5;circle(0.,0., 10.")
     region_edisp = EDispKernelMap.from_edisp_kernel(edisp, geom=geom)

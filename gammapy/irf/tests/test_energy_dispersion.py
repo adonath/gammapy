@@ -3,7 +3,7 @@ import numpy as np
 from numpy.testing import assert_allclose, assert_equal
 import astropy.units as u
 from astropy.coordinates import Angle
-from gammapy.irf import EDispKernel, EnergyDispersion2D
+from gammapy.irf import EDispKernel, EnergyDispersion2D, EDispKernelMap
 from gammapy.maps import MapAxis, MapAxes
 from gammapy.utils.testing import mpl_plot_check, requires_data, requires_dependency
 
@@ -15,13 +15,13 @@ class TestEDispKernel:
 
         self.resolution = 0.1
         self.bias = 0
-        self.edisp = EDispKernel.from_gauss(
+        self.edisp = EDispKernelMap.from_gauss(
             energy_axis_true=energy_axis_true,
             energy_axis=energy_axis,
             pdf_threshold=1e-7,
             sigma=self.resolution,
             bias=self.bias,
-        )
+        ).get_edisp_kernel()
 
     def test_from_diagonal_response(self):
         energy_axis_true = MapAxis.from_energy_edges([0.5, 1, 2, 4, 6] * u.TeV, name="energy_true")

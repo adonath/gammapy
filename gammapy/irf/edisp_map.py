@@ -483,12 +483,25 @@ class EDispKernelMap(IRFMap):
         edisp_map : `EDispKernelMap`
             Energy dispersion kernel map.
         """
-        kernel = EDispKernel.from_gauss(
-            energy_axis=energy_axis,
+        from .energy_dispersion import EnergyDispersion2D
+
+        migra_axis = MapAxis.from_bounds(1.0 / 3, 3, nbin=200, name="migra")
+
+        # A dummy offset axis (need length 2 for interpolation to work)
+        offset_axis = MapAxis.from_edges([0, 1, 2], unit="deg", name="offset")
+
+        edisp = EnergyDispersion2D.from_gauss(
             energy_axis_true=energy_axis_true,
+            migra_axis=migra_axis,
+            offset_axis=offset_axis,
             sigma=sigma,
             bias=bias,
             pdf_threshold=pdf_threshold,
+        )
+
+        kernel = edisp.to_edisp_kernel(
+            offset=offset_axis.center[0],
+            energy=energy_axis.edges
         )
         return cls.from_edisp_kernel(kernel, geom=geom)
 

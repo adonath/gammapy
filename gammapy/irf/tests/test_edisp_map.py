@@ -188,7 +188,7 @@ def test_edisp_map_to_edisp_kernel_map():
     kernel = edisp_kernel_map.get_edisp_kernel(position)
 
     assert edisp_kernel_map.exposure_map.geom.axes[0].name == "energy"
-    actual = kernel.pdf_matrix.sum(axis=0)
+    actual = kernel.data.sum(axis=0)
     assert_allclose(actual, 2.0)
 
 
@@ -216,7 +216,7 @@ def test_edisp_kernel_map_stack():
     position = SkyCoord(0, 0, unit="deg")
     kernel = edisp_1.get_edisp_kernel(position)
 
-    actual = kernel.pdf_matrix.sum(axis=0)
+    actual = kernel.data.sum(axis=0)
     exposure = edisp_1.exposure_map.data[:, 0, 0, 0]
 
     assert_allclose(actual, [2.0 / 3.0, 2.0 / 3.0, 2.0, 2.0, 2.0])

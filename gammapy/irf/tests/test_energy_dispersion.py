@@ -29,18 +29,18 @@ class TestEDispKernel:
 
         edisp = EDispKernel.from_diagonal_response(energy_axis_true, energy_axis)
 
-        assert edisp.pdf_matrix.shape == (4, 2)
+        assert edisp.data.shape == (4, 2)
         expected = [[0, 0], [0, 0], [1, 0], [0, 1]]
 
-        assert_equal(edisp.pdf_matrix, expected)
+        assert_equal(edisp.data, expected)
 
         # Test square matrix
         edisp = EDispKernel.from_diagonal_response(energy_axis_true)
         assert_allclose(edisp.axes["energy"].edges, edisp.axes["energy_true"].edges)
         assert edisp.axes["energy"].unit == "TeV"
-        assert_equal(edisp.pdf_matrix[0][0], 1)
-        assert_equal(edisp.pdf_matrix[2][0], 0)
-        assert edisp.pdf_matrix.sum() == 4
+        assert_equal(edisp.data[0][0], 1)
+        assert_equal(edisp.data[2][0], 0)
+        assert edisp.data.sum() == 4
 
     def test_to_image(self):
         energy_axis = MapAxis.from_energy_bounds("0.1 TeV", "10 TeV", nbin=3)
@@ -55,9 +55,9 @@ class TestEDispKernel:
         )
         im = edisp.to_image()
 
-        assert im.pdf_matrix.shape == (5, 1)
+        assert im.data.shape == (5, 1)
         assert_allclose(
-            im.pdf_matrix, [[0.97142], [1.0], [1.0], [1.0], [0.12349]], rtol=1e-3
+            im.data, [[0.97142], [1.0], [1.0], [1.0], [0.12349]], rtol=1e-3
         )
         assert_allclose(im.axes["energy"].edges, [0.1, 10] * u.TeV)
 
@@ -79,10 +79,10 @@ class TestEDispKernel:
 
     def test_io(self, tmp_path):
         indices = np.array([[1, 3, 6], [3, 3, 2]])
-        desired = self.edisp.pdf_matrix[indices]
+        desired = self.edisp.data[indices]
         self.edisp.write(tmp_path / "tmp.fits")
         edisp2 = EDispKernel.read(tmp_path / "tmp.fits")
-        actual = edisp2.pdf_matrix[indices]
+        actual = edisp2.data[indices]
         assert_allclose(actual, desired)
 
     @requires_dependency("matplotlib")
@@ -164,7 +164,7 @@ class TestEnergyDispersion2D:
         e_true = MapAxis.from_energy_bounds(0.8, 5, 5, "TeV").edges
         rmf = self.edisp.to_edisp_kernel(offset, energy_true=e_true, energy=e_reco)
         assert_allclose(rmf.data.data[2, 3], 0.08, atol=5e-2)  # same tolerance as above
-        actual = rmf.pdf_matrix[2]
+        actual = rmf.data[2]
         e_val = np.sqrt(e_true[2] * e_true[3])
         desired = self.edisp.get_response(offset, e_val, e_reco)
         assert_equal(actual, desired)

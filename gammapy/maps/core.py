@@ -1111,7 +1111,7 @@ class Map(abc.ABC):
         if edisp is not None:
             loc = self.geom.axes.index("energy_true")
             data = np.rollaxis(self.data, loc, len(self.data.shape))
-            data = np.dot(data, edisp.pdf_matrix)
+            data = np.dot(data, edisp.data)
             data = np.rollaxis(data, -1, loc)
             energy_axis = edisp.axes["energy"].copy(name="energy")
         else:

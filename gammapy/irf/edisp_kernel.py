@@ -48,15 +48,6 @@ class EDispKernel(IRF):
     """Default Interpolation kwargs for `~IRF`. Fill zeros and do not
     interpolate"""
 
-    @property
-    def pdf_matrix(self):
-        """Energy dispersion PDF matrix (`~numpy.ndarray`).
-
-        Rows (first index): True Energy
-        Columns (second index): Reco Energy
-        """
-        return self.data
-
     def pdf_in_safe_range(self, lo_threshold, hi_threshold):
         """PDF matrix with bins outside threshold set to 0.
 
@@ -67,7 +58,7 @@ class EDispKernel(IRF):
         hi_threshold : `~astropy.units.Quantity`
             High reco energy threshold
         """
-        data = self.pdf_matrix.copy()
+        data = self.data.copy()
         energy = self.axes["energy"].edges
 
         if lo_threshold is None and hi_threshold is None:
@@ -306,7 +297,7 @@ class EDispKernel(IRF):
         """
         table = self.axes["energy_true"].to_table(format=format)
 
-        rows = self.pdf_matrix.shape[0]
+        rows = self.data.shape[0]
         n_grp = []
         f_chan = np.ndarray(dtype=np.object, shape=rows)
         n_chan = np.ndarray(dtype=np.object, shape=rows)

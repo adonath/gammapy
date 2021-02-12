@@ -450,7 +450,7 @@ class EDispKernelMap(IRFMap):
             edisp.axes["energy"], edisp.axes["energy_true"], geom=geom
         )
         edisp_map.edisp_map.data *= 0
-        edisp_map.edisp_map.data[:, :, ...] = edisp.pdf_matrix[
+        edisp_map.edisp_map.data[:, :, ...] = edisp.data[
             :, :, np.newaxis, np.newaxis
         ]
         return edisp_map

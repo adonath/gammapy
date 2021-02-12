@@ -251,8 +251,8 @@ def test_spectrum_dataset_stack_diagonal_safe_mask(spectrum_dataset):
     kernel = edisp.get_edisp_kernel()
     kernel_stacked = spectrum_dataset1.edisp.get_edisp_kernel()
 
-    assert_allclose(kernel_stacked.pdf_matrix[1:], kernel.pdf_matrix[1:])
-    assert_allclose(kernel_stacked.pdf_matrix[0], 0.5 * kernel.pdf_matrix[0])
+    assert_allclose(kernel_stacked.data[1:], kernel.data[1:])
+    assert_allclose(kernel_stacked.data[0], 0.5 * kernel.data[0])
 
 
 def test_spectrum_dataset_stack_nondiagonal_no_bkg(spectrum_dataset):

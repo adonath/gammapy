@@ -492,6 +492,7 @@ class EDispKernelMap(IRFMap):
         )
         return cls.from_edisp_kernel(kernel, geom=geom)
 
+    # TODO: add mask to EDispKernelMap
     def to_image(self, weights=None):
         """"Return a 2D EdispKernelMap by summing over the reconstructed energy axis.
 

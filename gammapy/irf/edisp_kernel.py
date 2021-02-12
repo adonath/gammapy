@@ -48,46 +48,6 @@ class EDispKernel(IRF):
     """Default Interpolation kwargs for `~IRF`. Fill zeros and do not
     interpolate"""
 
-    def pdf_in_safe_range(self, lo_threshold, hi_threshold):
-        """PDF matrix with bins outside threshold set to 0.
-
-        Parameters
-        ----------
-        lo_threshold : `~astropy.units.Quantity`
-            Low reco energy threshold
-        hi_threshold : `~astropy.units.Quantity`
-            High reco energy threshold
-        """
-        data = self.data.copy()
-        energy = self.axes["energy"].edges
-
-        if lo_threshold is None and hi_threshold is None:
-            idx = slice(None)
-        else:
-            idx = (energy[:-1] < lo_threshold) | (energy[1:] > hi_threshold)
-        data[:, idx] = 0
-        return data
-
-    def to_image(self, lo_threshold=None, hi_threshold=None):
-        """Return a 2D edisp by summing the pdf matrix over the ereco axis.
-
-        Parameters
-        ----------
-        lo_threshold :`~astropy.units.Quantity`, optional
-            Low reco energy threshold
-        hi_threshold : `~astropy.units.Quantity`, optional
-            High reco energy threshold
-        """
-        energy_axis = self.axes["energy"]
-        lo_threshold = lo_threshold or energy_axis.edges[0]
-        hi_threshold = hi_threshold or energy_axis.edges[-1]
-        data = self.pdf_in_safe_range(lo_threshold, hi_threshold)
-
-        return self.__class__(
-            axes=self.axes.squash("energy"),
-            data=np.sum(data, axis=1, keepdims=True),
-        )
-
     @classmethod
     def from_gauss(cls, energy_axis_true, energy_axis, sigma, bias, pdf_threshold=1e-6):
         """Create Gaussian energy dispersion matrix (`EnergyDispersion`).

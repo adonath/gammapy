@@ -402,8 +402,15 @@ class EDispKernelMap(IRFMap):
         )
 
     @classmethod
-    def from_diagonal_response(cls, energy_axis, energy_axis_true, geom=None):
+    def from_diagonal_response(cls, energy_axis, energy_axis_true=None, geom=None):
         """Create an energy dispersion map with diagonal response.
+
+        This creates the matrix corresponding to a perfect energy response.
+        It contains ones where the energy_true center is inside the e_reco bin.
+        It is a square diagonal matrix if energy_true = e_reco.
+
+        This is useful in cases where code always applies an edisp,
+        but you don't want it to do anything.
 
         Parameters
         ----------
@@ -414,11 +421,38 @@ class EDispKernelMap(IRFMap):
         geom : `~gammapy.maps.Geom`
             The (2D) geom object to use. Default creates an all sky geometry with 2 bins.
 
+        Examples
+        --------
+        If ``energy_true`` equals ``energy``, you get a diagonal matrix::
+
+            from gammapy.irf import EDispKernelMap
+            from gammapy.maps import MapAxis
+            from astropy import units as u
+
+            energy_axis = MapAxis.from_energy_edges([0.5, 1, 2, 4, 6] * u.TeV)
+            edisp = EDispKernelMap.from_diagonal_response(energy_axis)
+            edisp.get_edisp_kernel().plot_matrix()
+
+
+        Example with different energy binnings::
+
+            from gammapy.irf import EDispKernelMap
+            from gammapy.maps import MapAxis
+            from astropy import units as u
+
+            energy_axis_true = MapAxis.from_energy_bounds(1 * u.TeV, 100 * u.TeV, nbin=30, name="energy_true")
+            energy_axis = MapAxis.from_energy_bounds(1 * u.TeV, 100 * u.TeV, nbin=10)
+            edisp = EDispKernelMap.from_diagonal_response(energy_axis, energy_axis_true)
+            edisp.get_edisp_kernel().plot_matrix()
+
         Returns
         -------
         edisp_map : `EDispKernelMap`
             Energy dispersion kernel map.
         """
+        if energy_axis_true is None:
+            energy_axis_true = energy_axis.copy(name="energy_true")
+
         if geom is None:
             geom = WcsGeom.create(
                 npix=(2, 1), proj="CAR", binsz=180, axes=[energy_axis, energy_axis_true]

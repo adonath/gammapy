@@ -27,19 +27,19 @@ class TestEDispKernel:
         energy_axis_true = MapAxis.from_energy_edges([0.5, 1, 2, 4, 6] * u.TeV, name="energy_true")
         energy_axis = MapAxis.from_energy_edges([2, 4, 6] * u.TeV)
 
-        edisp = EDispKernel.from_diagonal_response(energy_axis_true, energy_axis)
+        edisp = EDispKernelMap.from_diagonal_response(energy_axis, energy_axis_true).get_edisp_kernel()
 
         assert edisp.data.shape == (4, 2)
         expected = [[0, 0], [0, 0], [1, 0], [0, 1]]
 
-        assert_equal(edisp.data, expected)
+        assert_allclose(edisp.data, expected, atol=1e-12)
 
         # Test square matrix
-        edisp = EDispKernel.from_diagonal_response(energy_axis_true)
+        edisp = EDispKernelMap.from_diagonal_response(energy_axis_true.copy(name="energy")).get_edisp_kernel()
         assert_allclose(edisp.axes["energy"].edges, edisp.axes["energy_true"].edges)
         assert edisp.axes["energy"].unit == "TeV"
-        assert_equal(edisp.data[0][0], 1)
-        assert_equal(edisp.data[2][0], 0)
+        assert_allclose(edisp.data[0][0], 1, atol=1e-12)
+        assert_allclose(edisp.data[2][0], 0, atol=1e-12)
         assert edisp.data.sum() == 4
 
     def test_str(self):

@@ -49,50 +49,6 @@ class EDispKernel(IRF):
     interpolate"""
 
     @classmethod
-    def from_diagonal_response(cls, energy_axis_true, energy_axis=None):
-        """Create energy dispersion from a diagonal response, i.e. perfect energy resolution
-
-        This creates the matrix corresponding to a perfect energy response.
-        It contains ones where the energy_true center is inside the e_reco bin.
-        It is a square diagonal matrix if energy_true = e_reco.
-
-        This is useful in cases where code always applies an edisp,
-        but you don't want it to do anything.
-
-        Parameters
-        ----------
-        energy_axis_true, energy_axis : `MapAxis`
-            True and reconstructed energy axis
-
-        Examples
-        --------
-        If ``energy_true`` equals ``energy``, you get a diagonal matrix::
-
-            from gammapy.irf import EDispKernel
-            from gammapy.maps import MapAxis
-
-            energy_true_axis = MapAxis.from_energy_edges([0.5, 1, 2, 4, 6] * u.TeV, name="energy_true")
-            edisp = EDispKernel.from_diagonal_response(energy_true_axis)
-            edisp.plot_matrix()
-
-        Example with different energy binnings::
-
-            energy_true_axis = MapAxis.from_energy_edges([0.5, 1, 2, 4, 6] * u.TeV, name="energy_true")
-            energy_axis = MapAxis.from_energy_edges([2, 4, 6] * u.TeV)
-            edisp = EDispKernel.from_diagonal_response(energy_true_axis, energy_axis)
-            edisp.plot_matrix()
-        """
-        from .edisp_map import get_overlap_fraction
-
-        energy_axis_true.assert_name("energy_true")
-
-        if energy_axis is None:
-            energy_axis = energy_axis_true.copy(name="energy")
-
-        data = get_overlap_fraction(energy_axis, energy_axis_true)
-        return cls(axes=[energy_axis_true, energy_axis], data=data.value)
-
-    @classmethod
     def from_hdulist(cls, hdulist, hdu1="MATRIX", hdu2="EBOUNDS"):
         """Create `EnergyDispersion` object from `~astropy.io.fits.HDUList`.
 

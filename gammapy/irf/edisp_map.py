@@ -240,7 +240,7 @@ class EDispMap(IRFMap):
 
         Parameters
         ----------
-        energy : `~gammapy.maps.MapAxis`
+        energy_axis : `~gammapy.maps.MapAxis`
             Reconstructed enrgy axis.
 
         Returns

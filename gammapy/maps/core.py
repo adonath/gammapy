@@ -377,14 +377,15 @@ class Map(abc.ABC):
         vals = u.Quantity(map_in.get_by_idx(idx), map_in.unit)
         self.fill_by_coord(coords, vals)
 
-    @abc.abstractmethod
-    def pad(self, pad_width, mode="constant", cval=0, order=1):
+    def pad(self, pad_width, axis_name=None, mode="constant", cval=0, order=1):
         """Pad the spatial dimensions of the map.
 
         Parameters
         ----------
         pad_width : {sequence, array_like, int}
             Number of pixels padded to the edges of each axis.
+        axis_name : str
+            Which axis to downsample. By default spatial axes are padded.
         mode : {'edge', 'constant', 'interp'}
             Padding mode.  'edge' pads with the closest edge value.
             'constant' pads with a constant value. 'interp' pads with
@@ -401,7 +402,20 @@ class Map(abc.ABC):
             Padded map.
 
         """
-        pass
+        if np.isscalar(pad_width):
+            pad_width = (pad_width, pad_width)
+
+        geom = self.geom.pad(pad_width=pad_width, axis_name=axis_name)
+        idx = self.geom.axes.index_data(axis_name)
+        pad_width_np = [(0, 0)] * self.geom.ndim
+        pad_width_np[idx] = pad_width
+
+        kwargs = {}
+        if mode == "constant":
+            kwargs["constant_values"] = cval
+
+        data = np.pad(self.data, pad_width=pad_width_np, mode=mode, **kwargs)
+        return self.__class__(geom=geom, data=data, unit=self.unit, meta=self.meta.copy())
 
     @abc.abstractmethod
     def crop(self, crop_width):
@@ -421,7 +435,7 @@ class Map(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def downsample(self, factor, preserve_counts=True, axis=None):
+    def downsample(self, factor, preserve_counts=True, axis_name=None):
         """Downsample the spatial dimension by a given factor.
 
         Parameters
@@ -432,7 +446,7 @@ class Map(abc.ABC):
             Preserve the integral over each bin.  This should be true
             if the map is an integral quantity (e.g. counts) and false if
             the map is a differential quantity (e.g. intensity).
-        axis : str
+        axis_name : str
             Which axis to downsample. By default spatial axes are downsampled.
 
         Returns
@@ -1098,7 +1112,12 @@ class Map(abc.ABC):
             Copied Map.
         """
         if "geom" in kwargs:
-            raise ValueError("Can't copy and change geometry of the map.")
+            geom = kwargs["geom"]
+            if not geom.data_shape == self.geom.data_shape:
+                raise ValueError("Can't copy and change data size of the map. "
+                                 f" Current shape {self.geom.data_shape},"
+                                 f" requested shape {geom.data_shape}")
+
         return self._init_copy(**kwargs)
 
     def apply_edisp(self, edisp):
@@ -1269,10 +1288,10 @@ class Map(abc.ABC):
             # take Jacobian into account
             values = 2 * np.pi * axis.center.reshape(shape) * values
 
-        data = values.cumsum(axis=axis_idx)
+        data = np.insert(values.cumsum(axis=axis_idx), 0, 0, axis=axis_idx)
 
         axis_shifted = MapAxis.from_nodes(
-            axis.edges[1:], name=axis.name, interp=axis.interp
+            axis.edges, name=axis.name, interp=axis.interp
         )
         axes = self.geom.axes.replace(axis_shifted)
         geom = self.geom.to_image().to_cube(axes)
@@ -1299,6 +1318,7 @@ class Map(abc.ABC):
             Returns 2D array with axes offset
         """
         cumsum = self.cumsum(axis_name=axis_name)
+        cumsum = cumsum.pad(pad_width=1, axis_name=axis_name, mode="edge")
         return u.Quantity(
             cumsum.interp_by_coord(coords, **kwargs),
             cumsum.unit,

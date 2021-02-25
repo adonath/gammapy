@@ -331,6 +331,31 @@ class MapAxes(Sequence):
 
         return self.__class__(axes=axes)
 
+    def pad(self, axis_name, pad_width):
+        """Pad axes
+
+        Parameters
+        ----------
+        axis_name : str
+            Name of the axis to pad.
+        pad_width : int or tuple of int
+            Pad width
+
+        Returns
+        -------
+        axes : `MapAxes`
+            Axes with squashed axis.
+
+        """
+        axes = []
+
+        for ax in self:
+            if ax.name == axis_name:
+                ax = ax.pad(pad_width=pad_width)
+            axes.append(ax)
+
+        return self.__class__(axes=axes)
+
     def drop(self, axis_name):
         """Drop an axis.
 
@@ -1102,6 +1127,34 @@ class MapAxis:
             return self.from_edges(edges=edges, interp=self.interp, name=self.name)
         else:
             nodes = np.append(self.center, axis.center)
+            return self.from_nodes(nodes=nodes, interp=self.interp, name=self.name)
+
+    def pad(self, pad_width):
+        """Pad axis by a given number of pixels
+
+        Parameters
+        ----------
+        pad_width : int or tuple of int
+            A single int pads in both direction of the axis, a tuple specifies,
+            which number of bins to pad at the low and high edge of the axis.
+
+        Returns
+        -------
+        axis : `MapAxis`
+            Padded axis
+        """
+        if isinstance(pad_width, tuple):
+            pad_low, pad_high = pad_width
+        else:
+            pad_low, pad_high = pad_width, pad_width
+
+        if self.node_type == "edges":
+            pix = np.arange(-pad_low, self.nbin + pad_high + 1) - 0.5
+            edges = self.pix_to_coord(pix)
+            return self.from_edges(edges=edges, interp=self.interp, name=self.name)
+        else:
+            pix = np.arange(-pad_low, self.nbin + pad_high)
+            nodes = self.pix_to_coord(pix)
             return self.from_nodes(nodes=nodes, interp=self.interp, name=self.name)
 
     @classmethod
@@ -2359,7 +2412,7 @@ class Geom(abc.ABC):
         return self.to_image().to_cube(axes=axes)
 
     @abc.abstractmethod
-    def pad(self, pad_width):
+    def pad(self, pad_width, axis_name):
         """
         Pad the geometry at the edges.
 
@@ -2367,6 +2420,8 @@ class Geom(abc.ABC):
         ----------
         pad_width : {sequence, array_like, int}
             Number of values padded to the edges of each axis.
+        axis_name : str
+            Name of the axis to pad.
 
         Returns
         -------

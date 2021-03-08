@@ -6,6 +6,7 @@ import astropy.units as u
 from astropy.coordinates import Angle, SkyCoord
 from astropy.io import fits
 from astropy.nddata import Cutout2D
+from astropy.nddata.utils import overlap_slices
 from astropy.convolution import Tophat2DKernel
 from astropy.wcs import WCS
 from astropy.wcs.utils import (
@@ -211,10 +212,30 @@ class WcsGeom(Geom):
         """
         return self._frame
 
-    @property
-    def cutout_info(self):
-        """Cutout info dict."""
-        return self._cutout_info
+    def cutout_slices(self, geom):
+        """Cutout info dict.
+
+        Parameters
+        ----------
+        geom : `WcsGeom`
+            Reference geometry
+
+        Returns
+        -------
+        slices : dict
+            Dictionary containing "parent-slices" and "cutout-slices".
+        """
+        position = geom.to_image().coord_to_pix(self.center_skydir)
+        slices = overlap_slices(
+            large_array_shape=geom.data_shape[-2:],
+            small_array_shape=self.data_shape[-2:],
+            position=position[::-1],
+            mode="partial"
+        )
+        return {
+            "parent-slices": slices[0],
+            "cutout-slices": slices[1],
+        }
 
     @property
     def projection(self):
@@ -432,6 +453,12 @@ class WcsGeom(Geom):
         wcs.array_shape = npix[0].flat[0], npix[1].flat[0]
         wcs.wcs.datfix()
         return cls(wcs, npix, cdelt=binsz, axes=axes)
+
+    @property
+    def footprint(self):
+        """Footprint of the geometry"""
+        coords = self.wcs.calc_footprint()
+        return SkyCoord(coords, frame=self.frame, unit="deg")
 
     @classmethod
     def from_header(cls, header, hdu_bands=None, format="gadf"):
@@ -678,7 +705,7 @@ class WcsGeom(Geom):
         npix = (np.max(self._npix[0]), np.max(self._npix[1]))
         cdelt = (np.max(self._cdelt[0]), np.max(self._cdelt[1]))
         return self.__class__(
-            self._wcs, npix, cdelt=cdelt, cutout_info=self.cutout_info
+            self._wcs, npix, cdelt=cdelt
         )
 
     def to_cube(self, axes):
@@ -690,7 +717,6 @@ class WcsGeom(Geom):
             npix,
             cdelt=cdelt,
             axes=axes,
-            cutout_info=self.cutout_info,
         )
 
     def _pad_spatial(self, pad_width):

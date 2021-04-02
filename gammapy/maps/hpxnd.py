@@ -613,6 +613,55 @@ class HpxNDMap(HpxMap):
 
         return map_out
 
+    def cutout(self, position, width, *args, **kwargs):
+        """Create a cutout around a given position.
+
+        Parameters
+        ----------
+        position : `~astropy.coordinates.SkyCoord`
+            Center position of the cutout region.
+        width : `~astropy.coordinates.Angle` or `~astropy.units.Quantity`
+            Radius of the circular cutout region.
+
+        Returns
+        -------
+        cutout : `~gammapy.maps.HpxNDMap`
+            Cutout map
+        """
+        geom = self.geom.cutout(position=position, width=width)
+        data = self.data[..., geom._ipix]
+        return self.__class__(
+            geom=geom, data=data, unit=self.unit, meta=self.meta
+        )
+
+    def stack(self, other, weights=None):
+        """Stack cutout into map.
+
+        Parameters
+        ----------
+        other : `HpxNDMap`
+            Other map to stack
+        weights : `HpxNDMap`
+            Array to be used as weights. The spatial geometry must be equivalent
+            to `other` and additional axes must be broadcastable.
+        """
+        if self.geom == other.geom:
+            idx = None
+        elif self.geom.is_aligned(other.geom):
+            idx = other.geom._ipix
+        else:
+            raise ValueError(
+                "Can only stack equivalent maps or cutout of the same map."
+            )
+
+        data = other.quantity.to_value(self.unit)
+
+        if weights is not None:
+            if not other.geom.to_image() == weights.geom.to_image():
+                raise ValueError("Incompatible spatial geoms between map and weights")
+            data = data * weights.data
+        self.data[..., idx] += data
+
     def plot(
         self,
         method="raster",

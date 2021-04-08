@@ -308,6 +308,17 @@ class HpxNDMap(HpxMap):
 
         return map_out
 
+    # TODO: support convolution via healpy?
+    def convolve(self, kernel):
+        """"""
+        if self.geom.is_allsky:
+            raise ValueError("Convolution is currently only supported for partial HEALPix maps")
+
+        wcs_map = self.to_wcs(proj="TAN", oversample=1)
+        wcs_map.data = np.nan_to_num(wcs_map.data)
+        convolved = wcs_map.convolve(kernel=kernel)
+        return convolved.interp_to_geom(self.geom.to_image().to_cube(axes=convolved.geom.axes), preserve_counts=True)
+
     def to_region_nd_map(self, region, weights=None, method="nearest"):
         """Get region ND map in a given region.
 
@@ -346,7 +357,7 @@ class HpxNDMap(HpxMap):
 
         return RegionNDMap(geom=geom, data=data, unit=self.unit, meta=self.meta.copy())
 
-    def interp_by_coord(self, coords, method="linear"):
+    def interp_by_coord(self, coords, method="linear", fill_value=None):
         # inherited docstring
         coords = MapCoord.create(coords, frame=self.geom.frame)
 
@@ -425,47 +436,9 @@ class HpxNDMap(HpxMap):
         idx = self.geom.global_to_local(idx)
         return self.data.T[idx]
 
-    def _get_interp_weights(self, coords, idxs=None):
-        import healpy as hp
-
-        if idxs is None:
-            idxs = self.geom.coord_to_idx(coords, clip=True)[1:]
-
-        theta, phi = coords.theta, coords.phi
-
-        m = ~np.isfinite(theta)
-        theta[m] = 0
-        phi[m] = 0
-
-        if not self.geom.is_regular:
-            nside = self.geom.nside[tuple(idxs)]
-        else:
-            nside = self.geom.nside
-
-        pix, wts = hp.get_interp_weights(nside, theta, phi, nest=self.geom.nest)
-        wts[:, m] = 0
-        pix[:, m] = INVALID_INDEX.int
-
-        if not self.geom.is_regular:
-            pix_local = [self.geom.global_to_local([pix] + list(idxs))[0]]
-        else:
-            pix_local = [self.geom[pix]]
-
-        # If a pixel lies outside of the geometry set its index to the center pixel
-        m = pix_local[0] == INVALID_INDEX.int
-        if m.any():
-            coords_ctr = [coords.lon, coords.lat]
-            coords_ctr += [ax.pix_to_coord(t) for ax, t in zip(self.geom.axes, idxs)]
-            idx_ctr = self.geom.coord_to_idx(coords_ctr)
-            idx_ctr = self.geom.global_to_local(idx_ctr)
-            pix_local[0][m] = (idx_ctr[0] * np.ones(pix.shape, dtype=int))[m]
-
-        pix_local += [np.broadcast_to(t, pix_local[0].shape) for t in idxs]
-        return pix_local, wts
-
     def _interp_by_coord(self, coords):
         """Linearly interpolate map values."""
-        pix, wts = self._get_interp_weights(coords)
+        pix, wts = self.geom.interp_weights(coords)
 
         if self.geom.is_image:
             return np.sum(self.data.T[tuple(pix)] * wts, axis=0)
@@ -491,7 +464,7 @@ class HpxNDMap(HpxMap):
                     pix_i += [idx]
 
             if not self.geom.is_regular:
-                pix, wts = self._get_interp_weights(coords, pix_i)
+                pix, wts = self.geom.interp_weights(coords, pix_i)
 
             wts[pix[0] == INVALID_INDEX.int] = 0
             wt[~np.isfinite(wt)] = 0
@@ -669,7 +642,13 @@ class HpxNDMap(HpxMap):
             Cutout map
         """
         geom = self.geom.cutout(position=position, width=width)
-        data = self.data[..., geom._ipix]
+
+        if self.geom.is_allsky:
+            idx = geom._ipix
+        else:
+            idx = self.geom.to_image().global_to_local((geom._ipix,))
+
+        data = self.data[..., idx]
         return self.__class__(
             geom=geom, data=data, unit=self.unit, meta=self.meta
         )
@@ -688,7 +667,10 @@ class HpxNDMap(HpxMap):
         if self.geom == other.geom:
             idx = None
         elif self.geom.is_aligned(other.geom):
-            idx = other.geom._ipix
+            if self.geom.is_allsky:
+                idx = other.geom._ipix
+            else:
+                idx = self.geom.to_image().global_to_local((other.geom._ipix,))[0]
         else:
             raise ValueError(
                 "Can only stack equivalent maps or cutout of the same map."

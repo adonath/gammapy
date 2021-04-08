@@ -3,6 +3,7 @@ import numpy as np
 from astropy.io import fits
 from astropy.units import Quantity
 from astropy.coordinates import SkyCoord
+from regions import PointSkyRegion
 from gammapy.utils.units import unit_from_fits_image_hdu
 from .geom import MapCoord, pix_tuple_to_idx
 from .hpx import (
@@ -15,6 +16,8 @@ from .hpx import (
 )
 from .hpxmap import HpxMap
 from .utils import INVALID_INDEX
+from .region import RegionGeom
+from .regionnd import RegionNDMap
 
 __all__ = ["HpxNDMap"]
 
@@ -302,6 +305,44 @@ class HpxNDMap(HpxMap):
             map_out.data /= factor ** 2
 
         return map_out
+
+    def to_region_nd_map(self, region, weights=None, method="nearest"):
+        """Get region ND map in a given region.
+
+        By default the whole map region is considered.
+
+        Parameters
+        ----------
+        region: `~regions.Region` or `~astropy.coordinates.SkyCoord`
+             Region.
+        weights : `WcsNDMap`
+            Array to be used as weights. The geometry must be equivalent.
+        method : {"nearest", "linear"}
+            How to interpolate if a position is given.
+
+        Returns
+        -------
+        spectrum : `~gammapy.maps.RegionNDMap`
+            Spectrum in the given region.
+        """
+        if isinstance(region, SkyCoord):
+            region = PointSkyRegion(region)
+
+        if weights is not None:
+            if not self.geom == weights.geom:
+                raise ValueError("Incompatible spatial geoms between map and weights")
+
+        geom = RegionGeom(region=region, axes=self.geom.axes)
+
+        if isinstance(region, PointSkyRegion):
+            coords = geom.get_coord()
+            data = self.interp_by_coord(coords=coords, method=method)
+            if weights is not None:
+                data *= weights.interp_by_coord(coords=coords, method=method)
+        else:
+            raise ValueError(f"Region {type(region)} currently not supported")
+
+        return RegionNDMap(geom=geom, data=data, unit=self.unit, meta=self.meta.copy())
 
     def interp_by_coord(self, coords, method="linear"):
         # inherited docstring

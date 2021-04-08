@@ -194,6 +194,11 @@ class WcsGeom(Geom):
         return self._shape[self._slice_non_spatial_axes]
 
     @property
+    def shape_axes_full(self):
+        """Shape of non-spatial axes and unit spatial axes."""
+        return self._shape[self._slice_non_spatial_axes] + (1, 1)
+
+    @property
     def wcs(self):
         """WCS projection object."""
         return self._wcs
@@ -810,22 +815,6 @@ class WcsGeom(Geom):
             value = value * self.axes.bin_volume().T[..., np.newaxis, np.newaxis]
 
         return value
-
-    def separation(self, center):
-        """Compute sky separation wrt a given center.
-
-        Parameters
-        ----------
-        center : `~astropy.coordinates.SkyCoord`
-            Center position
-
-        Returns
-        -------
-        separation : `~astropy.coordinates.Angle`
-            Separation angle array (2D)
-        """
-        coord = self.to_image().get_coord()
-        return center.separation(coord.skycoord)
 
     def cutout(self, position, width, mode="trim"):
         """

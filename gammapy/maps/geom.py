@@ -2097,6 +2097,22 @@ class Geom(abc.ABC):
     def center_skydir(self):
         pass
 
+    def separation(self, center):
+        """Compute sky separation wrt a given center.
+
+        Parameters
+        ----------
+        center : `~astropy.coordinates.SkyCoord`
+            Center position
+
+        Returns
+        -------
+        separation : `~astropy.coordinates.Angle`
+            Separation angle array (2D)
+        """
+        coord = self.to_image().get_coord()
+        return center.separation(coord.skycoord)
+
     @classmethod
     def from_hdulist(cls, hdulist, hdu=None, hdu_bands=None):
         """Load a geometry object from a FITS HDUList.

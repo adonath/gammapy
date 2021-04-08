@@ -503,6 +503,11 @@ class HpxGeom(Geom):
         npix_shape = tuple([np.max(self.npix)])
         return (npix_shape + self.axes.shape)[::-1]
 
+    @property
+    def shape_axes_full(self):
+        """Shape of non-spatial axes and unit spatial axes."""
+        return self.axes.shape[::-1] + (1,)
+
     def _create_lookup(self, region):
         """Create local-to-global pixel lookup table."""
         if isinstance(region, str):

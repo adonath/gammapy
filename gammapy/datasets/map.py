@@ -2616,6 +2616,8 @@ class MapEvaluator:
                 if geom.is_region:
                     # here we just need to choose a large value, the size will be the rad max
                     geom = geom.to_wcs_geom(width_min="15 deg")
+                elif geom.is_hpx:
+                    geom = geom.to_wcs_geom(proj="TAN", oversample=1, drop_axes=False)
 
                 self.psf = psf.get_psf_kernel(position=self.model.position, geom=geom)
 
@@ -2704,7 +2706,11 @@ class MapEvaluator:
         """Compute spectral flux"""
         energy = self.geom.axes["energy_true"].edges
         value = self.model.spectral_model.integral(energy[:-1], energy[1:],)
-        return value.reshape((-1, 1, 1))
+        if self.geom.is_hpx:
+            shape = (-1, 1)
+        else:
+            shape = (-1, 1, 1)
+        return value.reshape(shape)
 
     def compute_temporal_norm(self):
         """Compute temporal norm """

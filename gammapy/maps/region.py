@@ -76,6 +76,11 @@ class RegionGeom(Geom):
         self.get_wcs_coord_and_weights = lru_cache()(self.get_wcs_coord_and_weights)
 
     @property
+    def shape_axes_full(self):
+        """Shape of non-spatial axes and unit spatial axes."""
+        return self._shape[self._slice_non_spatial_axes] + (1, 1)
+
+    @property
     def frame(self):
         """Coordinate system, either Galactic ("galactic") or Equatorial
             ("icrs")."""

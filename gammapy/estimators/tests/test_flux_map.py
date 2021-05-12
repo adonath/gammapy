@@ -76,12 +76,12 @@ def partial_wcs_flux_map():
 def test_flux_map_properties(wcs_flux_map, reference_model):
     fluxmap = FluxMaps(wcs_flux_map, reference_model)
 
-    assert_allclose(fluxmap.dnde.data[:,0,0],[1e-11, 1e-13])
-    assert_allclose(fluxmap.dnde_err.data[:,0,0],[1e-12, 1e-14])
-    assert_allclose(fluxmap.dnde_err.data[:,0,0],[1e-12, 1e-14])
-    assert_allclose(fluxmap.dnde_errn.data[:,0,0],[2e-12, 2e-14])
-    assert_allclose(fluxmap.dnde_errp.data[:,0,0],[2e-12, 2e-14])
-    assert_allclose(fluxmap.dnde_ul.data[:,0,0],[2e-11, 2e-13])
+    assert_allclose(fluxmap.dnde.data[:, 0, 0], [1e-11, 1e-13])
+    assert_allclose(fluxmap.dnde_err.data[:, 0, 0], [1e-12, 1e-14])
+    assert_allclose(fluxmap.dnde_err.data[:, 0, 0], [1e-12, 1e-14])
+    assert_allclose(fluxmap.dnde_errn.data[:, 0, 0], [2e-12, 2e-14])
+    assert_allclose(fluxmap.dnde_errp.data[:, 0, 0], [2e-12, 2e-14])
+    assert_allclose(fluxmap.dnde_ul.data[:, 0, 0], [2e-11, 2e-13])
 
     assert_allclose(fluxmap.flux.data[:,0,0],[9e-12, 9e-13])
     assert_allclose(fluxmap.flux_err.data[:,0,0],[9e-13, 9e-14])

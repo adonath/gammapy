@@ -453,11 +453,18 @@ class Parameters(collections.abc.Sequence):
         else:
             raise TypeError(f"Invalid type: {other!r}")
 
-    def to_dict(self):
-        data = []
+    def to_dict(self, format="full"):
+        if format == "full":
+            data = []
 
-        for par in self._parameters:
-            data.append(par.to_dict())
+            for par in self._parameters:
+                data.append(par.to_dict())
+        elif format == "compact":
+            data = {}
+            for par in self:
+                data[par.name] = par.quantity.to_string()
+        else:
+            raise ValueError("")
 
         return data
 

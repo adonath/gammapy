@@ -17,8 +17,9 @@ def test_estimator_registry():
 @pytest.fixture(scope="session")
 def table_flux_estimate():
     axis = MapAxis.from_energy_edges((0.1, 1.0, 10.0), unit="TeV")
+    model = PowerLawSpectralModel(amplitude="1e-10 cm-2s-1TeV-1", index=2)
 
-    cols = dict()
+    cols = model.reference_fluxes(energy_axis=axis)
     cols["norm"] = np.array([1.0, 1.0])
     cols["norm_err"] = np.array([0.1, 0.1])
     cols["norm_errn"] = np.array([0.2, 0.2])
@@ -26,19 +27,24 @@ def table_flux_estimate():
     cols["norm_ul"] = np.array([2.0, 2.0])
     cols["e_min"] = axis.edges[:-1]
     cols["e_max"] = axis.edges[1:]
-
-    table = Table(cols, names=cols.keys())
-
-    return table
+    return Table(cols, names=cols.keys())
 
 
 @pytest.fixture(scope="session")
 def map_flux_estimate():
+    model = PowerLawSpectralModel(amplitude="1e-10 cm-2s-1TeV-1", index=2)
     axis = MapAxis.from_energy_edges((0.1, 1.0, 10.0), unit="TeV")
+    fluxes = model.reference_fluxes(energy_axis=axis)
 
     nmap = WcsNDMap.create(npix=5, axes=[axis])
 
-    cols = dict()
+    cols = {}
+
+    for key, value in fluxes.items():
+        m = WcsNDMap.from_geom(geom=nmap.geom, unit=value.unit)
+        m.quantity += value.reshape((-1, 1, 1))
+        cols[key] = m
+
     cols["norm"] = nmap.copy(data=1.0)
     cols["norm_err"] = nmap.copy(data=0.1)
     cols["norm_errn"] = nmap.copy(data=0.2)
@@ -50,10 +56,9 @@ def map_flux_estimate():
 
 class TestFluxEstimate:
     def test_table_properties(self, table_flux_estimate):
-        model = PowerLawSpectralModel(amplitude="1e-10 cm-2s-1TeV-1", index=2)
-        fe = FluxEstimate(data=table_flux_estimate, reference_spectral_model=model)
 
-        print(fe.available_quantities)
+        fe = FluxEstimate(data=table_flux_estimate)
+
         assert fe.dnde.unit == u.Unit("cm-2s-1TeV-1")
         assert_allclose(fe.dnde.value, [1e-9, 1e-11])
         assert_allclose(fe.dnde_err.value, [1e-10, 1e-12])
@@ -73,14 +78,13 @@ class TestFluxEstimate:
     def test_missing_column(self, table_flux_estimate):
         table_flux_estimate.remove_column("norm_errn")
         model = PowerLawSpectralModel(amplitude="1e-10 cm-2s-1TeV-1", index=2)
-        fe = FluxEstimate(data=table_flux_estimate, reference_spectral_model=model)
+        fe = FluxEstimate(data=table_flux_estimate)
 
         with pytest.raises(KeyError):
             fe.dnde_errn
 
     def test_map_properties(self, map_flux_estimate):
-        model = PowerLawSpectralModel(amplitude="1e-10 cm-2s-1TeV-1", index=2)
-        fe = FluxEstimate(data=map_flux_estimate, reference_spectral_model=model)
+        fe = FluxEstimate(data=map_flux_estimate)
 
         assert fe.dnde.unit == u.Unit("cm-2s-1TeV-1")
         assert_allclose(fe.dnde.quantity.value[:, 2, 2], [1e-9, 1e-11])

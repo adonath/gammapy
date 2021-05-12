@@ -57,6 +57,10 @@ class SpectralModel(Model):
         """Whether model is a norm spectral model"""
         return "Norm" in cls.__name__
 
+    def to_string(self):
+        """"""
+        return f"{self.tag[0]}{tuple(self.parameters.value.tolist())}"
+
     @staticmethod
     def _convert_evaluate_unit(kwargs_ref, energy):
         kwargs = {}

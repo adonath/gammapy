@@ -175,11 +175,9 @@ class FluxEstimate:
     data : dict of `Map` or `Table`
         Mappable containing the sed data with at least a 'norm' entry.
         If data is a Table, it should contain 'e_min' and 'e_max' columns.
-    reference_spectral_model : `SpectralModel`
-        Reference spectral model used to produce the input data.
     """
 
-    def __init__(self, data, reference_spectral_model):
+    def __init__(self, data):
         # TODO: Check data
         self._data = data
 
@@ -191,10 +189,6 @@ class FluxEstimate:
             self._energy_axis = MapAxis.from_table(table=data, format="gadf-sed")
             self._expand_slice = slice(None)
 
-        # Note that here we could use the specification from dnde_ref to build piecewise PL
-        # But does it work beyond min and max centers?
-
-        self._reference_spectral_model = reference_spectral_model
 
     @staticmethod
     def _validate_data(data, sed_type, check_scan=False):
@@ -221,11 +215,6 @@ class FluxEstimate:
     def energy_axis(self):
         """Energy axis (`MapAxis`)"""
         return self._energy_axis
-
-    @property
-    def reference_spectral_model(self):
-        """Reference spectral model (`SpectralModel`)"""
-        return self._reference_spectral_model
 
     @property
     def data(self):
@@ -369,33 +358,23 @@ class FluxEstimate:
     @property
     def dnde_ref(self):
         """Reference differential flux"""
-        result = self.reference_spectral_model(self.energy_axis.center)
-        return result[self._expand_slice]
+        return self.data["ref_dnde"].quantity
 
     @property
     def e2dnde_ref(self):
         """Reference differential flux * energy ** 2"""
-        energy = self.energy_axis.center
-        result = (
-            self.reference_spectral_model(energy) * energy ** 2
-        )
-        return result[self._expand_slice]
+        energy = self.energy_axis.center[self._expand_slice]
+        return energy ** 2 * self.dnde_ref
 
     @property
     def flux_ref(self):
         """Reference integral flux"""
-        energy_min = self.energy_axis.edges[:-1]
-        energy_max = self.energy_axis.edges[1:]
-        result = self.reference_spectral_model.integral(energy_min, energy_max)
-        return result[self._expand_slice]
+        return self.data["ref_flux"].quantity
 
     @property
     def eflux_ref(self):
         """Reference energy flux"""
-        energy_min = self.energy_axis.edges[:-1]
-        energy_max = self.energy_axis.edges[1:]
-        result = self.reference_spectral_model.energy_flux(energy_min, energy_max)
-        return result[self._expand_slice]
+        return self.data["ref_eflux"].quantity
 
     @property
     def dnde(self):

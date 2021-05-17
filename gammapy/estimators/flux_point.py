@@ -355,10 +355,6 @@ class FluxPoints(FluxEstimate):
 
         elif sed_type == "likelihood":
             data = cls._convert_loglike_columns(table)
-            reference_model = TemplateSpectralModel(
-                energy=table["e_ref"].quantity,
-                values=table["ref_dnde"].quantity
-            )
         else:
             raise ValueError(f"Not a valid SED type {sed_type}")
 
@@ -368,7 +364,7 @@ class FluxPoints(FluxEstimate):
                 data[key] = table[key]
 
         data.meta["SED_TYPE"] = "likelihood"
-        return cls(data=data, reference_spectral_model=reference_model)
+        return cls(data=data)
 
     def to_table(self, sed_type="likelihood"):
         """Create table for a given SED type.
@@ -825,9 +821,7 @@ class FluxPointsEstimator(Estimator):
             rows.append(row)
 
         table = table_from_row_data(rows=rows, meta={"SED_TYPE": "likelihood"})
-
-        model = datasets.models[self.source]
-        return FluxPoints(table, reference_spectral_model=model.spectral_model.copy())
+        return FluxPoints(data=table)
 
     def estimate_flux_point(self, datasets, energy_min, energy_max):
         """Estimate flux point for a single energy group.

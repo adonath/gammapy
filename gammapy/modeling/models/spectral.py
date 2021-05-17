@@ -8,7 +8,7 @@ import astropy.units as u
 from astropy import constants as const
 from astropy.table import Table
 from astropy.utils.decorators import classproperty
-from gammapy.maps import MapAxis
+from gammapy.maps import MapAxis, Map
 from gammapy.modeling import Parameter, Parameters
 from gammapy.utils.integrate import trapz_loglog
 from gammapy.utils.interpolation import (
@@ -56,10 +56,6 @@ class SpectralModel(Model):
     def is_norm_spectral_model(cls):
         """Whether model is a norm spectral model"""
         return "Norm" in cls.__name__
-
-    def to_string(self):
-        """"""
-        return f"{self.tag[0]}{tuple(self.parameters.value.tolist())}"
 
     @staticmethod
     def _convert_evaluate_unit(kwargs_ref, energy):
@@ -245,30 +241,60 @@ class SpectralModel(Model):
             **kwargs,
         )
 
-    def reference_fluxes(self,  energy_axis):
+    def to_reference_flux_dict(self, energy, energy_min, energy_max):
         """Get reference fluxes for a given energy axis.
 
         Parameters
         ----------
-        energy_axis : `MapAxis`
-            Energy axis
+        energy, energy_min, energy_max : `~astropy.units.Quantity`
+            Energy values
 
         Returns
         -------
         fluxes : dict of `~astropy.units.Quantity`
             Reference fluxes
         """
-        energy = energy_axis.center
-        energy_min, energy_max = energy_axis.edges[:-1], energy_axis.edges[1:]
         return {
-            "e_ref": energy,
-            "e_min": energy_min,
-            "e_max": energy_max,
+            "energy": energy,
+            "energy_min": energy_min,
+            "energy_max": energy_max,
             "ref_dnde": self(energy),
             "ref_flux": self.integral(energy_min, energy_max),
             "ref_eflux": self.energy_flux(energy_min, energy_max),
             "ref_e2dnde": self(energy) * energy ** 2,
         }
+
+    def to_reference_flux_maps(self, geom):
+        """Get reference fluxes for a given geom.
+
+        Parameters
+        ----------
+        geom : `Geom`
+            Map geom with energy axis
+
+        Returns
+        -------
+        fluxes : dict of `~gammapy.maps.Map`
+            Reference fluxes
+        """
+        energy_axis = geom.axes["energy"]
+
+        fluxes = self.to_reference_flux_dict(
+            energy=energy_axis.center,
+            energy_min=energy_axis.edges[:-1],
+            energy_max=energy_axis.edges[1:],
+        )
+
+        maps = {}
+
+        for key, value in fluxes.items():
+            m = Map.from_geom(geom=geom, data=1, unit=value.unit)
+            m.quantity = m.data * value[:, np.newaxis, np.newaxis]
+            maps[key] = m
+
+        return maps
+
+
 
     def plot(
         self,

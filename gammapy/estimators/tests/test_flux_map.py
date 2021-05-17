@@ -5,15 +5,10 @@ from astropy.io import fits
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from gammapy.data import GTI
-from gammapy.maps import MapAxis, WcsNDMap
+from gammapy.maps import MapAxis, WcsNDMap, WcsGeom
 from gammapy.modeling.models import SkyModel, PowerLawSpectralModel, PointSpatialModel, LogParabolaSpectralModel
 from gammapy.estimators import FluxMaps
 from gammapy.utils.testing import mpl_plot_check, requires_dependency
-
-
-@pytest.fixture(scope="session")
-def reference_model():
-    return SkyModel(spatial_model=PointSpatialModel(), spectral_model=PowerLawSpectralModel(index=2))
 
 
 @pytest.fixture(scope="session")
@@ -24,11 +19,13 @@ def logpar_reference_model():
 
 @pytest.fixture(scope="session")
 def wcs_flux_map():
-    energy_axis = MapAxis.from_energy_bounds(0.1,10, 2, unit='TeV')
+    energy_axis = MapAxis.from_energy_bounds(0.1, 10, 2, unit='TeV')
+    spectral_model = PowerLawSpectralModel(index=2)
 
-    map_dict = {}
+    geom = WcsGeom.create(npix=10, frame='galactic', axes=[energy_axis])
+    map_dict = spectral_model.to_reference_flux_maps(geom=geom)
 
-    map_dict["norm"]= WcsNDMap.create(npix=10, frame='galactic', axes=[energy_axis], unit='')
+    map_dict["norm"] = WcsNDMap.create(npix=10, frame='galactic', axes=[energy_axis], unit='')
     map_dict["norm"].data += 1.0
 
     map_dict["norm_err"] = WcsNDMap.create(npix=10, frame='galactic', axes=[energy_axis], unit='')
@@ -73,8 +70,9 @@ def partial_wcs_flux_map():
     return map_dict
 
 
-def test_flux_map_properties(wcs_flux_map, reference_model):
-    fluxmap = FluxMaps(wcs_flux_map, reference_model)
+def test_flux_map_properties(wcs_flux_map):
+
+    fluxmap = FluxMaps.from_dict(wcs_flux_map)
 
     assert_allclose(fluxmap.dnde.data[:, 0, 0], [1e-11, 1e-13])
     assert_allclose(fluxmap.dnde_err.data[:, 0, 0], [1e-12, 1e-14])
@@ -105,8 +103,8 @@ def test_flux_map_properties(wcs_flux_map, reference_model):
     assert_allclose(fluxmap.ts.data[:,0,0], [0, 3])
 
 
-def test_flux_map_str(wcs_flux_map, reference_model):
-    fluxmap = FluxMaps(wcs_flux_map, reference_model)
+def test_flux_map_str(wcs_flux_map):
+    fluxmap = FluxMaps(data=wcs_flux_map)
 
     fm_str = fluxmap.__str__()
 

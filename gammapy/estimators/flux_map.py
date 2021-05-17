@@ -20,17 +20,21 @@ log = logging.getLogger(__name__)
 class FluxMaps(FluxEstimate):
     """A flux map container.
 
-    It contains a set of `~gammapy.maps.Map` objects that store the estimated flux as a function of energy as well as
-    associated quantities (typically errors, upper limits, delta TS and possibly raw quantities such counts,
-    excesses etc). It also contains a reference model to convert the flux values in different formats. Usually, this
-    should be the model used to produce the flux map.
+    It contains a set of `~gammapy.maps.Map` objects that store the estimated
+    flux as a function of energy as well asn associated quantities (typically
+    errors, upper limits, delta TS and possibly raw quantities such counts,
+    excesses etc). It also contains a reference model to convert the flux values
+    in different formats. Usually, this should be the model used to produce the
+    flux map.
 
-    The associated map geometry can use a `RegionGeom` to store the equivalent of flux points, or a `WcsGeom`/`HpxGeom`
-    to store an energy dependent flux map.
+    The associated map geometry can use a `RegionGeom` to store the equivalent
+    of flux points, or a `WcsGeom`/`HpxGeom` to store an energy dependent flux
+    map.
 
-    The container relies internally on the 'Likelihood' SED type defined in :ref:`gadf:flux-points`
-    and offers convenience properties to convert to other flux formats, namely:
-    ``dnde``, ``flux``, ``eflux`` or ``e2dnde``. The conversion is done according to the reference model spectral shape.
+    The container relies internally on the 'Likelihood' SED type defined in
+    :ref:`gadf:flux-points` and offers convenience properties to convert to
+    other flux formats, namely: ``dnde``, ``flux``, ``eflux`` or ``e2dnde``.
+    The conversion is done according to the reference model spectral shape.
 
     Parameters
     ----------
@@ -45,18 +49,13 @@ class FluxMaps(FluxEstimate):
         * stat_scan : optional, the test statistic scan values.
         * ts : optional, the delta TS associated with the flux value.
         * sqrt_ts : optional, the square root of the TS, when relevant.
-    reference_model : `~gammapy.modeling.models.SkyModel`, optional
-        the reference model to use for conversions. Default in None.
-        If None, a model consisting of a point source with a power law spectrum of index 2 is assumed.
     gti : `~gammapy.data.GTI`
         the maps GTI information. Default is None.
     """
 
-    def __init__(self, data, reference_model, gti=None):
-        self.reference_model = reference_model
+    def __init__(self, data, gti=None):
         self.gti = gti
-
-        super().__init__(data=data, reference_spectral_model=reference_model.spectral_model)
+        super().__init__(data=data)
 
     @classproperty
     def reference_model_default(cls):
@@ -114,7 +113,7 @@ class FluxMaps(FluxEstimate):
             m = getattr(self, name)
             table[name] = m.get_by_coord(coords) * m.unit
 
-        return FluxPoints(table, reference_spectral_model=self.reference_spectral_model)
+        return FluxPoints(data=table, reference_spectral_model=self.reference_spectral_model)
 
     def to_dict(self, sed_type="likelihood"):
         """Return maps in a given SED type in the form of a dictionary.
@@ -297,7 +296,8 @@ class FluxMaps(FluxEstimate):
             SED type of the input maps. Default is `Likelihood`
         reference_model : `~gammapy.modeling.models.SkyModel`, optional
             Reference model to use for conversions. Default in None.
-            If None, a model consisting of a point source with a power law spectrum of index 2 is assumed.
+            If None, a model consisting of a point source with a power law
+            spectrum of index 2 is assumed.
         gti : `~gammapy.data.GTI`
             Maps GTI information. Default is None.
 
@@ -309,20 +309,20 @@ class FluxMaps(FluxEstimate):
         cls._validate_data(data=maps, sed_type=sed_type)
 
         if sed_type == "likelihood":
-            return cls(data=maps, reference_model=reference_model)
+            return cls(data=maps)
 
         if reference_model is None:
             log.warning(
                 "No reference model set for FluxMaps. Assuming point source with E^-2 spectrum."
             )
-            reference_model = cls.default_model
+            reference_model = PowerLawSpectralModel()
 
         map_ref = maps[sed_type]
 
         energy_axis = map_ref.geom.axes["energy"]
 
         with np.errstate(invalid="ignore", divide="ignore"):
-            fluxes = reference_model.spectral_model.reference_fluxes(energy_axis=energy_axis)
+            fluxes = reference_model.reference_fluxes(energy_axis=energy_axis)
 
         # TODO: handle reshaping in MapAxis
         factor = fluxes[f"ref_{sed_type}"].to(map_ref.unit)[:, np.newaxis, np.newaxis]
@@ -340,7 +340,7 @@ class FluxMaps(FluxEstimate):
             if key in maps:
                 data[key] = maps[key]
 
-        return cls(data=data, reference_model=reference_model, gti=gti)
+        return cls(data=data, gti=gti)
 
     # TODO: should we allow this?
     def __getitem__(self, item):

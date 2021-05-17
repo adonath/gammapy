@@ -23,7 +23,7 @@ REQUIRED_MAPS = {
     "e2dnde": ["e2dnde"],
     "flux": ["flux"],
     "eflux": ["eflux"],
-    "likelihood": ["norm"],
+    "likelihood": ["norm", "ref_dnde", "ref_eflux", "ref_flux"],
 }
 
 REQUIRED_COLUMNS = {
@@ -32,7 +32,7 @@ REQUIRED_COLUMNS = {
     "flux": ["e_min", "e_max", "flux"],
     "eflux": ["e_min", "e_max", "eflux"],
     # TODO: extend required columns
-    "likelihood": ["e_min", "e_max", "e_ref", "ref_dnde", "norm"],
+    "likelihood": ["e_min", "e_max", "e_ref", "ref_dnde", "ref_flux", "ref_eflux", "norm"],
 }
 
 REQUIRED_QUANTITIES_SCAN = ["norm_scan", "stat_scan", "stat"]
@@ -188,7 +188,6 @@ class FluxEstimate:
             # Here we assume there is only one row per energy
             self._energy_axis = MapAxis.from_table(table=data, format="gadf-sed")
             self._expand_slice = slice(None)
-
 
     @staticmethod
     def _validate_data(data, sed_type, check_scan=False):

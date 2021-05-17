@@ -458,10 +458,9 @@ class LightCurveEstimator(Estimator):
             raise ValueError("LightCurveEstimator: No datasets in time intervals")
 
         table = table_from_row_data(rows=rows, meta={"SED_TYPE": "likelihood"})
-        model = datasets.models[self.source]
 
         # TODO: cleanup here...
-        fp = FluxPoints(table, reference_spectral_model=model.spectral_model.copy())
+        fp = FluxPoints(data=table)
         table_flux = fp.to_table(sed_type="flux")
         table_flux.remove_columns(["stat", "ts", "sqrt_ts", "e_min", "e_max"])
         return LightCurve(hstack([table, table_flux]))

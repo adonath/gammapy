@@ -255,14 +255,35 @@ class SpectralModel(Model):
             Reference fluxes
         """
         return {
-            "energy": energy,
-            "energy_min": energy_min,
-            "energy_max": energy_max,
             "ref_dnde": self(energy),
             "ref_flux": self.integral(energy_min, energy_max),
             "ref_eflux": self.energy_flux(energy_min, energy_max),
             "ref_e2dnde": self(energy) * energy ** 2,
         }
+
+    def to_reference_flux_table(self, energy_axis):
+        """Get reference fluxes for a given geom.
+
+        Parameters
+        ----------
+        energy_axis : `MapAxis`
+            Energy axis
+
+        Returns
+        -------
+        fluxes : `~astropy.table.Table`
+            Reference fluxes
+        """
+        fluxes = self.to_reference_flux_dict(
+            energy=energy_axis.center,
+            energy_min=energy_axis.edges[:-1],
+            energy_max=energy_axis.edges[1:],
+        )
+
+        fluxes["e_ref"] = energy_axis.center
+        fluxes["e_min"] = energy_axis.edges[:-1]
+        fluxes["e_max"] = energy_axis.edges[1:]
+        return Table(fluxes)
 
     def to_reference_flux_maps(self, geom):
         """Get reference fluxes for a given geom.
@@ -293,8 +314,6 @@ class SpectralModel(Model):
             maps[key] = m
 
         return maps
-
-
 
     def plot(
         self,

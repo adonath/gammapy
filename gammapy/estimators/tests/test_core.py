@@ -19,7 +19,7 @@ def table_flux_estimate():
     axis = MapAxis.from_energy_edges((0.1, 1.0, 10.0), unit="TeV")
     model = PowerLawSpectralModel(amplitude="1e-10 cm-2s-1TeV-1", index=2)
 
-    cols = model.reference_fluxes(energy_axis=axis)
+    cols = model.to_reference_flux_table(energy_axis=axis)
     cols["norm"] = np.array([1.0, 1.0])
     cols["norm_err"] = np.array([0.1, 0.1])
     cols["norm_errn"] = np.array([0.2, 0.2])
@@ -27,30 +27,22 @@ def table_flux_estimate():
     cols["norm_ul"] = np.array([2.0, 2.0])
     cols["e_min"] = axis.edges[:-1]
     cols["e_max"] = axis.edges[1:]
-    return Table(cols, names=cols.keys())
+    return cols
 
 
 @pytest.fixture(scope="session")
 def map_flux_estimate():
     model = PowerLawSpectralModel(amplitude="1e-10 cm-2s-1TeV-1", index=2)
     axis = MapAxis.from_energy_edges((0.1, 1.0, 10.0), unit="TeV")
-    fluxes = model.reference_fluxes(energy_axis=axis)
-
     nmap = WcsNDMap.create(npix=5, axes=[axis])
 
-    cols = {}
-
-    for key, value in fluxes.items():
-        m = WcsNDMap.from_geom(geom=nmap.geom, unit=value.unit)
-        m.quantity += value.reshape((-1, 1, 1))
-        cols[key] = m
+    cols = model.to_reference_flux_maps(nmap.geom)
 
     cols["norm"] = nmap.copy(data=1.0)
     cols["norm_err"] = nmap.copy(data=0.1)
     cols["norm_errn"] = nmap.copy(data=0.2)
     cols["norm_errp"] = nmap.copy(data=0.15)
     cols["norm_ul"] = nmap.copy(data=2.0)
-
     return cols
 
 

@@ -5,8 +5,8 @@ from astropy import units as u
 from astropy.io.registry import IORegistryError
 from astropy.table import Table, vstack
 from gammapy.datasets import Datasets
-from gammapy.modeling.models import PowerLawSpectralModel, TemplateSpectralModel
 from gammapy.maps import MapAxis
+from gammapy.modeling.models import PowerLawSpectralModel
 from gammapy.utils.interpolation import interpolate_profile
 from gammapy.utils.scripts import make_path
 from gammapy.utils.table import table_from_row_data, table_standardise_units_copy
@@ -294,11 +294,11 @@ class FluxPoints(FluxEstimate):
         energy_axis = MapAxis.from_table(table, format="gadf-sed")
 
         with np.errstate(invalid="ignore", divide="ignore"):
-            fluxes = reference_model.reference_fluxes(energy_axis=energy_axis)
+            fluxes = reference_model.to_reference_flux_table(energy_axis=energy_axis)
 
         # TODO: handle reshaping in MapAxis
         col_ref = table[sed_type]
-        factor = fluxes[f"ref_{sed_type}"].to(col_ref.unit)
+        factor = fluxes[f"ref_{sed_type}"].quantity.to(col_ref.unit)
 
         data = Table(fluxes)
         data["norm"] = col_ref / factor
@@ -425,7 +425,7 @@ class FluxPoints(FluxEstimate):
         ``gammapy download datasets --tests --out $GAMMAPY_DATA``
         """
         table_drop_ul = self.table[~self.is_ul]
-        return self.__class__(data=table_drop_ul, reference_spectral_model=self.reference_spectral_model)
+        return self.__class__(data=table_drop_ul)
 
     @staticmethod
     def _energy_ref_lafferty(model, energy_min, energy_max):
@@ -645,7 +645,7 @@ class FluxPoints(FluxEstimate):
         y_unit = u.Unit(y_unit or DEFAULT_UNIT[sed_type])
 
         if y_values is None:
-            ref_values = getattr(self, sed_type + "_ref")
+            ref_values = getattr(self, "ref_" + sed_type)
             y_values = np.geomspace(
                 0.2 * ref_values.value.min(), 5 * ref_values.value.max(), 500
             )
@@ -658,7 +658,7 @@ class FluxPoints(FluxEstimate):
         z = np.empty((len(self.norm), len(y_values)))
 
         for idx, row in enumerate(self.table):
-            y_ref = getattr(self, sed_type + "_ref")[idx]
+            y_ref = getattr(self, "ref_" + sed_type)[idx]
             norm = (y_values / y_ref).to_value("")
             norm_scan = row["norm_scan"]
             ts_scan = row["stat_scan"] - row["stat"]

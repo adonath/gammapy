@@ -8,7 +8,7 @@ from gammapy.data import GTI
 from gammapy.maps import MapCoord, Map
 from gammapy.estimators.core import FluxEstimate, OPTIONAL_QUANTITIES_COMMON, REQUIRED_MAPS, OPTIONAL_QUANTITIES
 from gammapy.estimators.flux_point import FluxPoints
-from gammapy.modeling.models import SkyModel, Models
+from gammapy.modeling.models import SkyModel, Models, PowerLawSpectralModel
 from gammapy.utils.scripts import make_path
 
 __all__ = ["FluxMaps"]
@@ -76,10 +76,6 @@ class FluxMaps(FluxEstimate):
 
         str_ += f"\n\tAvailable quantities : {list(self.data.keys())}\n\n"
 
-        str_ += "\tReference model:\n"
-        if self.reference_model is not None:
-            str_ += "\t" + "\n\t".join(str(self.reference_model).split("\n")[2:])
-
         return str_.expandtabs(tabsize=2)
 
     def get_flux_points(self, position=None):
@@ -98,22 +94,22 @@ class FluxMaps(FluxEstimate):
         if position is None:
             position = self.geom.center_skydir
 
-        with np.errstate(invalid="ignore", divide="ignore"):
-            ref_fluxes = self.reference_spectral_model.reference_fluxes(self.energy_axis)
-
-        table = Table(ref_fluxes)
+        table = Table()
         table.meta["SED_TYPE"] = "likelihood"
 
         coords = MapCoord.create(
             {"skycoord": position, "energy": self.energy_ref}
         )
+        table["e_min"] = self.energy_min
+        table["e_max"] = self.energy_max
+        table["e_ref"] = self.energy_ref
 
         # TODO: add support of norm and stat scan
         for name in self.data:
             m = getattr(self, name)
             table[name] = m.get_by_coord(coords) * m.unit
 
-        return FluxPoints(data=table, reference_spectral_model=self.reference_spectral_model)
+        return FluxPoints(data=table)
 
     def to_dict(self, sed_type="likelihood"):
         """Return maps in a given SED type in the form of a dictionary.
@@ -142,39 +138,20 @@ class FluxMaps(FluxEstimate):
 
         return data
 
-    def write(
-        self, filename, filename_model=None, overwrite=False, sed_type="likelihood"
-    ):
+    def write(self, filename, overwrite=False, sed_type="likelihood"):
         """Write flux map to file.
 
         Parameters
         ----------
         filename : str
             Filename to write to.
-        filename_model : str
-            Filename of the model (yaml format).
-            If None, keep string before '.' and add '_model.yaml' suffix
         overwrite : bool
             Overwrite file if it exists.
         sed_type : str
             sed type to convert to. Default is `likelihood`
         """
         filename = make_path(filename)
-
-        if filename_model is None:
-            name_string = filename.as_posix()
-            for suffix in filename.suffixes:
-                name_string.replace(suffix, "")
-            filename_model = name_string + "_model.yaml"
-
-        filename_model = make_path(filename_model)
-
         hdulist = self.to_hdulist(sed_type)
-
-        models = Models(self.reference_model)
-        models.write(filename_model, overwrite=overwrite)
-        hdulist[0].header["MODEL"] = filename_model.as_posix()
-
         hdulist.writeto(filename, overwrite=overwrite)
 
     def to_hdulist(self, sed_type="likelihood", hdu_bands=None):
@@ -268,21 +245,12 @@ class FluxMaps(FluxEstimate):
                     hdulist, hdu=map_type, hdu_bands=hdu_bands
                 )
 
-        filename = hdulist[0].header.get("MODEL", None)
-
-        if filename:
-            reference_model = Models.read(filename)[0]
-        else:
-            reference_model = None
-
         if "GTI" in hdulist:
             gti = GTI(Table.read(hdulist["GTI"]))
         else:
             gti = None
 
-        return cls.from_dict(
-            maps=maps, sed_type=sed_type, reference_model=reference_model, gti=gti
-        )
+        return cls.from_dict(maps=maps, sed_type=sed_type, gti=gti)
 
     @classmethod
     def from_dict(cls, maps, sed_type="likelihood", reference_model=None, gti=None):
@@ -309,7 +277,7 @@ class FluxMaps(FluxEstimate):
         cls._validate_data(data=maps, sed_type=sed_type)
 
         if sed_type == "likelihood":
-            return cls(data=maps)
+            return cls(data=maps, gti=gti)
 
         if reference_model is None:
             log.warning(
@@ -319,21 +287,18 @@ class FluxMaps(FluxEstimate):
 
         map_ref = maps[sed_type]
 
-        energy_axis = map_ref.geom.axes["energy"]
-
         with np.errstate(invalid="ignore", divide="ignore"):
-            fluxes = reference_model.reference_fluxes(energy_axis=energy_axis)
+            fluxes = reference_model.to_reference_flux_maps(geom=map_ref.geom)
 
-        # TODO: handle reshaping in MapAxis
-        factor = fluxes[f"ref_{sed_type}"].to(map_ref.unit)[:, np.newaxis, np.newaxis]
+        factor = fluxes[f"ref_{sed_type}"]
 
         data = dict()
-        data["norm"] = map_ref / factor
+        data["norm"] = (map_ref / factor).to_unit("")
 
         for key in OPTIONAL_QUANTITIES[sed_type]:
             if key in maps:
                 norm_type = key.replace(sed_type, "norm")
-                data[norm_type] = maps[key] / factor
+                data[norm_type] = (maps[key] / factor).to_unit("")
 
         # We add the remaining maps
         for key in OPTIONAL_QUANTITIES_COMMON:

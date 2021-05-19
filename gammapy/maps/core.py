@@ -1414,6 +1414,12 @@ class Map(abc.ABC):
             data=np.stack(data), geom=geom_ref.to_cube(axes=[axis]), unit=images[0].unit
         )
 
+    def to_unit(self, unit):
+        """Change unit of the map"""
+        out = self.copy()
+        out.quantity = self.quantity.to(unit)
+        return out
+
     def to_cube(self, axes):
         """Append non-spatial axes to create a higher-dimensional Map.
 

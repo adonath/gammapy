@@ -435,7 +435,10 @@ class TSMapEstimator(Estimator):
         result_all["sqrt_ts"] = self.estimate_sqrt_ts(
             result_all["ts"], result_all["norm"]
         )
-        return FluxMaps(data=result_all, reference_model=self.model, gti=dataset.gti)
+
+        ref_flux = self.model.spectral_model.to_reference_flux_maps(geom=result_all["norm"].geom)
+        result_all.update(ref_flux)
+        return FluxMaps(data=result_all, gti=dataset.gti)
 
 
 # TODO: merge with MapDataset?

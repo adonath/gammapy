@@ -332,21 +332,14 @@ class WcsNDMap(WcsMap):
         """
         import matplotlib.pyplot as plt
         from astropy.visualization import simple_norm
-        from astropy.visualization.wcsaxes.frame import EllipticalFrame
 
         if not self.geom.is_flat:
             raise TypeError("Use .plot_interactive() for Map dimension > 2")
 
+        ax = self._plot_default_axes(ax=ax)
+
         if fig is None:
             fig = plt.gcf()
-
-        if ax is None:
-            if self.geom.projection in ["AIT"]:
-                ax = fig.add_subplot(
-                    1, 1, 1, projection=self.geom.wcs, frame_class=EllipticalFrame
-                )
-            else:
-                ax = fig.add_subplot(1, 1, 1, projection=self.geom.wcs)
 
         if self.geom.is_image:
             data = self.data.astype(float)
@@ -376,6 +369,61 @@ class WcsNDMap(WcsMap):
         # without this the axis limits are changed when calling scatter
         ax.autoscale(enable=False)
         return fig, ax, cbar
+
+    def plot_mask(self, ax=None, **kwargs):
+        """Plot the mask as a shaded area
+
+        Parameters
+        ----------
+        ax : `~astropy.visualization.wcsaxes.WCSAxes`, optional
+            WCS axis object to plot on.
+        **kwargs : dict
+            Keyword arguments passed to `~matplotlib.pyplot.contourf`
+
+        Returns
+        -------
+        ax : `~astropy.visualization.wcsaxes.WCSAxes`, optional
+            WCS axis object to plot on.
+        """
+        if not self.geom.is_flat:
+            raise TypeError("Use .plot_interactive() for Map dimension > 2")
+
+        if not self.is_mask:
+            raise ValueError("`.plot_mask()` only supports maps containing boolean values.")
+
+        ax = self._plot_default_axes(ax=ax)
+
+        kwargs.setdefault("alpha", 0.5)
+        kwargs.setdefault("colors", "w")
+
+        data = np.squeeze(self.data).astype(float)
+
+        ax.contourf(data, levels=[0, 0.5], **kwargs)
+
+        if self.geom.is_allsky:
+            ax = self._plot_format_allsky(ax)
+        else:
+            ax = self._plot_format(ax)
+
+        # without this the axis limits are changed when calling scatter
+        ax.autoscale(enable=False)
+        return ax
+
+    def _plot_default_axes(self, ax):
+        import matplotlib.pyplot as plt
+        from astropy.visualization.wcsaxes.frame import EllipticalFrame
+
+        if ax is None:
+            fig = plt.gcf()
+            if self.geom.projection in ["AIT"]:
+                ax = fig.add_subplot(
+                    1, 1, 1, projection=self.geom.wcs,
+                    frame_class=EllipticalFrame
+                )
+            else:
+                ax = fig.add_subplot(1, 1, 1, projection=self.geom.wcs)
+
+        return ax
 
     def _plot_format(self, ax):
         try:
@@ -475,32 +523,6 @@ class WcsNDMap(WcsMap):
 
         return RegionNDMap(geom=geom, data=data, unit=self.unit, meta=self.meta.copy())
 
-    def get_spectrum(self, region=None, func=np.nansum, weights=None):
-        """Extract spectrum in a given region.
-
-        The spectrum can be computed by summing (or, more generally, applying ``func``)
-        along the spatial axes in each energy bin. This occurs only inside the ``region``,
-        which by default is assumed to be the whole spatial extension of the map.
-
-        Parameters
-        ----------
-        region: `~regions.Region`
-             Region (pixel or sky regions accepted).
-        func : numpy.func
-            Function to reduce the data. Default is np.nansum.
-            For a boolean Map, use np.any or np.all.
-        weights : `WcsNDMap`
-            Array to be used as weights. The geometry must be equivalent.
-
-        Returns
-        -------
-        spectrum : `~gammapy.maps.RegionNDMap`
-            Spectrum in the given region.
-        """
-        if not self.geom.has_energy_axis:
-            raise ValueError("Energy axis required")
-
-        return self.to_region_nd_map(region=region, func=func, weights=weights)
 
     def mask_contains_region(self, region):
         """Check if input region is contained in a boolean mask map.
@@ -602,8 +624,10 @@ class WcsNDMap(WcsMap):
         """Convolve map with a kernel.
 
         If the kernel is two dimensional, it is applied to all image planes likewise.
-        If the kernel is higher dimensional it must match the map in the number of
-        dimensions and the corresponding kernel is selected for every image plane.
+        If the kernel is higher dimensional should either match the map in the number of
+        dimensions or the map must be an image (no non-spatial axes). In that case, the
+        corresponding kernel is selected and applied to every image plane or to the single
+        input image respectively.
 
         Parameters
         ----------

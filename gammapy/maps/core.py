@@ -240,13 +240,28 @@ class Map(abc.ABC):
 
         Parameters
         ----------
+        hdulist :  `~astropy.io.fits.HDUList`
+            HDU list containing HDUs for map data and bands.
+        hdu : str
+            Name or index of the HDU with the map data.
+        hdu_bands : str
+            Name or index of the HDU with the BANDS table.
+        map_type : {"auto", "wcs", "hpx", "region"}
+            Map type.
+        format : {'gadf', 'fgst-ccube', 'fgst-template'}
+            FITS format convention.
         colname : str, optional
-            data column name to be used of healix map.
+            Data column name to be used for the HEALPix map.
+
+        Returns
+        -------
+        map_out : `Map`
+            Map object
         """
         if map_type == "auto":
             map_type = Map._get_map_type(hdulist, hdu)
         cls_out = Map._get_map_cls(map_type)
-        if map_type is "hpx":
+        if map_type == "hpx":
             return cls_out.from_hdulist(
                 hdulist, hdu=hdu, hdu_bands=hdu_bands, format=format, colname=colname
             )
@@ -254,6 +269,7 @@ class Map(abc.ABC):
             return cls_out.from_hdulist(
                 hdulist, hdu=hdu, hdu_bands=hdu_bands, format=format
             )
+
     @staticmethod
     def _get_meta_from_header(header):
         """Load meta data from a FITS header."""
@@ -1423,6 +1439,33 @@ class Map(abc.ABC):
         geom = self.geom.to_cube(axes)
         data = self.data.reshape((1,) * len(axes) + self.data.shape)
         return self.from_geom(data=data, geom=geom, unit=self.unit)
+
+    def get_spectrum(self, region=None, func=np.nansum, weights=None):
+        """Extract spectrum in a given region.
+
+        The spectrum can be computed by summing (or, more generally, applying ``func``)
+        along the spatial axes in each energy bin. This occurs only inside the ``region``,
+        which by default is assumed to be the whole spatial extension of the map.
+
+        Parameters
+        ----------
+        region: `~regions.Region`
+             Region (pixel or sky regions accepted).
+        func : numpy.func
+            Function to reduce the data. Default is np.nansum.
+            For a boolean Map, use np.any or np.all.
+        weights : `WcsNDMap`
+            Array to be used as weights. The geometry must be equivalent.
+
+        Returns
+        -------
+        spectrum : `~gammapy.maps.RegionNDMap`
+            Spectrum in the given region.
+        """
+        if not self.geom.has_energy_axis:
+            raise ValueError("Energy axis required")
+
+        return self.to_region_nd_map(region=region, func=func, weights=weights)
 
     def __repr__(self):
         geom = self.geom.__class__.__name__

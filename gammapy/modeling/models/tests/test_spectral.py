@@ -322,8 +322,12 @@ TEST_MODELS.append(
 @pytest.mark.parametrize("spectrum", TEST_MODELS, ids=lambda _: _["name"])
 def test_models(spectrum):
     model = spectrum["model"]
+    for p in model.parameters:
+        assert p._type == 'spectral'
     energy = 2 * u.TeV
     value = model(energy)
+    energies =  [2, 3] * u.TeV
+    values = model(energies)
     assert_quantity_allclose(value, spectrum["val_at_2TeV"], rtol=1e-7)
     if "val_at_3TeV" in spectrum:
         energy = 3 * u.TeV
@@ -354,7 +358,11 @@ def test_models(spectrum):
         or spectrum["name"] == "GaussianSpectralModel"
         or spectrum["name"] == "pbpl"
     ):
-        assert_quantity_allclose(model.inverse(value), 2 * u.TeV, rtol=0.01)
+        assert_quantity_allclose(model.inverse(value), energy, rtol=0.01)
+        inverse = model.inverse_all(values)
+        for ke, ener in enumerate(energies):
+            assert_quantity_allclose(inverse[ke], energies[ke], rtol=0.01)
+
 
     if "integral_infinity" in spectrum:
         energy_min = 0 * u.TeV
@@ -633,6 +641,8 @@ class TestNaimaModel:
             particle_distribution, nh=1 * u.cm ** -3
         )
         model = NaimaSpectralModel(radiative_model)
+        for p in model.parameters:
+            assert p._type == 'spectral'
 
         val_at_2TeV = 9.725347355450884e-14 * u.Unit("cm-2 s-1 TeV-1")
         integral_1_10TeV = 3.530537143620737e-13 * u.Unit("cm-2 s-1")
@@ -672,6 +682,8 @@ class TestNaimaModel:
         )
 
         model = NaimaSpectralModel(radiative_model)
+        for p in model.parameters:
+            assert p._type == 'spectral'
 
         val_at_2TeV = 4.347836316893546e-12 * u.Unit("cm-2 s-1 TeV-1")
         integral_1_10TeV = 1.595813e-11 * u.Unit("cm-2 s-1")
@@ -701,6 +713,8 @@ class TestNaimaModel:
         radiative_model = naima.radiative.Synchrotron(particle_distribution, B=2 * u.G)
 
         model = NaimaSpectralModel(radiative_model)
+        for p in model.parameters:
+            assert p._type == 'spectral'
 
         val_at_2TeV = 1.0565840392550432e-24 * u.Unit("cm-2 s-1 TeV-1")
         integral_1_10TeV = 4.449186e-13 * u.Unit("cm-2 s-1")

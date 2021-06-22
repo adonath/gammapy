@@ -6,9 +6,11 @@ from astropy.io.registry import IORegistryError
 from astropy.table import Table, vstack
 from gammapy.datasets import Datasets
 from gammapy.modeling.models import PowerLawSpectralModel, TemplateSpectralModel
+from gammapy.modeling import Fit
 from gammapy.maps import MapAxis
 from gammapy.utils.interpolation import interpolate_profile
 from gammapy.utils.scripts import make_path
+from gammapy.utils.pbar import progress_bar
 from gammapy.utils.table import table_from_row_data, table_standardise_units_copy
 from .core import (
     Estimator,
@@ -725,14 +727,6 @@ class FluxPointsEstimator(Estimator):
         Number of sigma to use for asymmetric error computation. Default is 1.
     n_sigma_ul : int
         Number of sigma to use for upper limit computation. Default is 2.
-    backend : str
-        Backend used for fitting, default : minuit
-    optimize_opts : dict
-        Options passed to `Fit.optimize`.
-    covariance_opts : dict
-        Options passed to `Fit.covariance`.
-    reoptimize : bool
-        Re-optimize other free model parameters.
     selection_optional : list of str
         Which additional quantities to estimate. Available options are:
 
@@ -742,6 +736,10 @@ class FluxPointsEstimator(Estimator):
             * "scan": estimate fit statistic profiles.
 
         Default is None so the optionnal steps are not executed.
+    fit : `Fit`
+        Fit instance specifying the backend and fit options.
+    reoptimize : bool
+        Re-optimize other free model parameters. Default is True.
     """
 
     tag = "FluxPointsEstimator"
@@ -757,11 +755,9 @@ class FluxPointsEstimator(Estimator):
         norm_values=None,
         n_sigma=1,
         n_sigma_ul=2,
-        backend="minuit",
-        optimize_opts=None,
-        covariance_opts=None,
-        reoptimize=False,
         selection_optional=None,
+        fit=None,
+        reoptimize=False
     ):
         self.energy_edges = energy_edges
         self.source = source
@@ -771,15 +767,13 @@ class FluxPointsEstimator(Estimator):
         self.norm_values = norm_values
         self.n_sigma = n_sigma
         self.n_sigma_ul = n_sigma_ul
-        self.backend = backend
-        if optimize_opts is None:
-            optimize_opts = {}
-        if covariance_opts is None:
-            covariance_opts = {}
-        self.optimize_opts = optimize_opts
-        self.covariance_opts = covariance_opts
-        self.reoptimize = reoptimize
         self.selection_optional = selection_optional
+
+        if fit is None:
+            fit = Fit(confidence_opts={"backend": "scipy"})
+
+        self.fit = fit
+        self.reoptimize = reoptimize
 
     def _flux_estimator(self, energy_min, energy_max):
         return FluxEstimator(
@@ -792,11 +786,9 @@ class FluxPointsEstimator(Estimator):
             norm_values=self.norm_values,
             n_sigma=self.n_sigma,
             n_sigma_ul=self.n_sigma_ul,
-            backend=self.backend,
-            optimize_opts=self.optimize_opts,
-            covariance_opts=self.covariance_opts,
-            reoptimize=self.reoptimize,
             selection_optional=self.selection_optional,
+            fit=self.fit,
+            reoptimize=self.reoptimize
         )
 
     def run(self, datasets):
@@ -806,7 +798,6 @@ class FluxPointsEstimator(Estimator):
         ----------
         datasets : list of `~gammapy.datasets.Dataset`
             Datasets
-
         Returns
         -------
         flux_points : `FluxPoints`
@@ -816,8 +807,9 @@ class FluxPointsEstimator(Estimator):
 
         rows = []
 
-        for energy_min, energy_max in zip(
-            self.energy_edges[:-1], self.energy_edges[1:]
+        for energy_min, energy_max in progress_bar(
+            zip(self.energy_edges[:-1], self.energy_edges[1:]),
+            desc="Energy bins"
         ):
             row = self.estimate_flux_point(
                 datasets, energy_min=energy_min, energy_max=energy_max,

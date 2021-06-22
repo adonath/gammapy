@@ -15,10 +15,12 @@ from gammapy.datasets.map import MapEvaluator
 from gammapy.maps import Map, MapCoord
 from gammapy.modeling.models import PointSpatialModel, PowerLawSpectralModel, SkyModel
 from gammapy.stats import cash_sum_cython, f_cash_root_cython, norm_bounds_cython
-from gammapy.utils.array import shape_2N, symmetric_crop_pad_width, round_up_to_odd
+from gammapy.utils.array import shape_2N, symmetric_crop_pad_width
+from gammapy.utils.pbar import progress_bar
 from .core import Estimator
 from .flux_map import FluxMaps
 from .utils import estimate_exposure_reco_energy
+from gammapy.utils.roots import find_roots
 
 __all__ = ["TSMapEstimator"]
 
@@ -208,17 +210,19 @@ class TSMapEstimator(Estimator):
 
         # Creating exposure map with exposure at map center
         exposure = Map.from_geom(geom_kernel, unit="cm2 s1")
-        coord = MapCoord.create(dict(skycoord=geom.center_skydir, energy_true=geom.axes["energy_true"].center))
-        exposure.data[...] = dataset.exposure.get_by_coord(coord)[:, np.newaxis, np.newaxis]
+        coord = MapCoord.create(
+            dict(
+                skycoord=geom.center_skydir, energy_true=geom.axes["energy_true"].center
+            )
+        )
+        exposure.data[...] = dataset.exposure.get_by_coord(coord)[
+            :, np.newaxis, np.newaxis
+        ]
 
         # We use global evaluation mode to not modify the geometry
         evaluator = MapEvaluator(model, evaluation_mode="global")
         evaluator.update(
-            exposure,
-            dataset.psf,
-            dataset.edisp,
-            dataset.counts.geom,
-            dataset.mask_fit,
+            exposure, dataset.psf, dataset.edisp, dataset.counts.geom, dataset.mask_fit,
         )
 
         kernel = evaluator.compute_npred()
@@ -379,7 +383,6 @@ class TSMapEstimator(Estimator):
         ----------
         dataset : `~gammapy.datasets.MapDataset`
             Input MapDataset.
-
         Returns
         -------
         maps : dict
@@ -410,7 +413,10 @@ class TSMapEstimator(Estimator):
 
         results = []
 
-        for energy_min, energy_max in zip(energy_edges[:-1], energy_edges[1:]):
+        for energy_min, energy_max in progress_bar(
+            zip(energy_edges[:-1], energy_edges[1:]),
+            desc="Energy bins"
+        ):
             sliced_dataset = datasets.slice_by_energy(energy_min, energy_max)[0]
 
             if self.sum_over_energy_groups:
@@ -552,6 +558,7 @@ class BrentqFluxEstimator(Estimator):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 try:
+                    # here we do not use avoid find_roots for performance
                     result_fit = scipy.optimize.brentq(
                         f=dataset.stat_derivative,
                         a=norm_min,
@@ -563,13 +570,10 @@ class BrentqFluxEstimator(Estimator):
                     norm = max(result_fit[0], norm_min_total)
                     niter = result_fit[1].iterations
                 except (RuntimeError, ValueError):
-                    # Where the root finding fails NaN is set as norm
                     norm, niter = norm_min_total, self.max_niter
 
         with np.errstate(invalid="ignore", divide="ignore"):
-            norm_err = (
-                np.sqrt(1 / dataset.stat_2nd_derivative(norm)) * self.n_sigma
-            )
+            norm_err = np.sqrt(1 / dataset.stat_2nd_derivative(norm)) * self.n_sigma
 
         stat = dataset.stat_sum(norm=norm)
         stat_null = dataset.stat_sum(norm=0)
@@ -580,7 +584,7 @@ class BrentqFluxEstimator(Estimator):
             "niter": niter,
             "ts": stat_null - stat,
             "stat": stat,
-            "stat_null": stat_null
+            "stat_null": stat_null,
         }
 
     def _confidence(self, dataset, n_sigma, result, positive):
@@ -602,18 +606,16 @@ class BrentqFluxEstimator(Estimator):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            try:
-                result_fit = scipy.optimize.brentq(
-                    ts_diff,
-                    min_norm,
-                    max_norm,
-                    maxiter=self.max_niter,
-                    rtol=self.rtol,
-                )
-                return (result_fit - norm) * factor
-            except (RuntimeError, ValueError):
-                # Where the root finding fails NaN is set as norm
-                return np.nan
+            roots, res = find_roots(
+                ts_diff,
+                [min_norm],
+                [max_norm],
+                nbin=1,
+                maxiter=self.max_niter,
+                rtol=self.rtol,
+            )
+            # Where the root finding fails NaN is set as norm
+            return (roots[0] - norm) * factor
 
     def estimate_ul(self, dataset, result):
         """Compute upper limit using likelihood profile method.
@@ -682,7 +684,7 @@ class BrentqFluxEstimator(Estimator):
             "niter": 0,
             "ts": stat_null - stat,
             "stat": stat,
-            "stat_null": stat_null
+            "stat_null": stat_null,
         }
 
     def run(self, dataset):

@@ -20,6 +20,7 @@ from gammapy.maps import Map, MapAxis, WcsGeom, RegionGeom
 from gammapy.modeling import Fit
 from gammapy.modeling.models import FoVBackgroundModel, Models
 from gammapy.utils.scripts import make_path
+from gammapy.utils.pbar import progress_bar
 
 __all__ = ["Analysis"]
 
@@ -47,7 +48,7 @@ class Analysis:
         self.observations = None
         self.datasets = None
         self.models = None
-        self.fit = None
+        self.fit = Fit()
         self.fit_result = None
         self.flux_points = None
 
@@ -172,7 +173,7 @@ class Analysis:
         models = Models.read(path)
         self.set_models(models)
 
-    def run_fit(self, optimize_opts=None):
+    def run_fit(self):
         """Fitting reduced datasets to model."""
         if not self.models:
             raise RuntimeError("Missing models")
@@ -186,14 +187,13 @@ class Analysis:
                 dataset.mask_fit = geom.energy_mask(energy_min, energy_max)
 
         log.info("Fitting datasets.")
-        self.fit = Fit(self.datasets, optimize_opts=optimize_opts)
-        self.fit_result = self.fit.run()
+        self.fit_result = self.fit.run(datasets=self.datasets)
         log.info(self.fit_result)
 
     def get_flux_points(self):
         """Calculate flux points for a specific model component."""
-        if not self.fit:
-            raise RuntimeError("No results available from Fit.")
+        if not self.datasets:
+            raise RuntimeError("No datasets set.")
 
         fp_settings = self.config.flux_points
         log.info("Calculating flux points.")
@@ -201,8 +201,10 @@ class Analysis:
         flux_point_estimator = FluxPointsEstimator(
             energy_edges=energy_edges,
             source=fp_settings.source,
+            fit=self.fit,
             **fp_settings.parameters,
         )
+
         fp = flux_point_estimator.run(datasets=self.datasets)
         fp.table["is_ul"] = fp.table["ts"] < 4
         self.flux_points = FluxPointsDataset(
@@ -252,6 +254,7 @@ class Analysis:
             time_intervals=time_intervals,
             energy_edges=energy_edges,
             source=lc_settings.source,
+            fit=self.fit,
             **lc_settings.parameters,
         )
         lc = light_curve_estimator.run(datasets=self.datasets)
@@ -285,7 +288,7 @@ class Analysis:
         return WcsGeom.create(**geom_params)
 
     def _map_making(self):
-        """Make maps and datasets for 3d analysis."""
+        """Make maps and datasets for 3d analysis"""
         datasets_settings = self.config.datasets
         log.info("Creating geometry.")
         geom = self._create_geometry()
@@ -309,7 +312,8 @@ class Analysis:
 
         bkg_maker_config = {}
         if datasets_settings.background.exclusion:
-            exclusion_region = Map.read(datasets_settings.background.exclusion)
+            path = make_path(datasets_settings.background.exclusion)
+            exclusion_region = Map.read(path)
             bkg_maker_config["exclusion_mask"] = exclusion_region
         bkg_maker_config.update(datasets_settings.background.parameters)
 
@@ -333,8 +337,11 @@ class Analysis:
         stacked = MapDataset.create(geom=geom, name="stacked", **geom_irf)
 
         if datasets_settings.stack:
-            for obs in self.observations:
-                log.info(f"Processing observation {obs.obs_id}")
+            for obs in progress_bar(
+                self.observations,
+                desc="Observations"
+            ):
+                log.debug(f"Processing observation {obs.obs_id}")
                 cutout = stacked.cutout(obs.pointing_radec, width=2 * offset_max)
                 dataset = maker.run(cutout, obs)
                 dataset = maker_safe_mask.run(dataset, obs)
@@ -350,8 +357,11 @@ class Analysis:
         else:
             datasets = []
 
-            for obs in self.observations:
-                log.info(f"Processing observation {obs.obs_id}")
+            for obs in progress_bar(
+                    self.observations,
+                    desc="Observations"
+            ):
+                log.debug(f"Processing observation {obs.obs_id}")
                 cutout = stacked.cutout(obs.pointing_radec, width=2 * offset_max)
                 dataset = maker.run(cutout, obs)
                 dataset = maker_safe_mask.run(dataset, obs)
@@ -359,7 +369,6 @@ class Analysis:
                     dataset = bkg_maker.run(dataset)
                 log.debug(dataset)
                 datasets.append(dataset)
-
         self.datasets = Datasets(datasets)
 
     def _spectrum_extraction(self):
@@ -383,7 +392,8 @@ class Analysis:
 
         bkg_maker_config = {}
         if datasets_settings.background.exclusion:
-            exclusion_region = Map.read(datasets_settings.background.exclusion)
+            path = make_path(datasets_settings.background.exclusion)
+            exclusion_region = Map.read(path)
             bkg_maker_config["exclusion_mask"] = exclusion_region
         bkg_maker_config.update(datasets_settings.background.parameters)
         bkg_method = datasets_settings.background.method
@@ -412,27 +422,27 @@ class Analysis:
         reference = SpectrumDataset.create(geom=geom, energy_axis_true=e_true)
 
         datasets = []
-        for obs in self.observations:
-            log.info(f"Processing observation {obs.obs_id}")
+        for obs in progress_bar(
+                self.observations,
+                desc="Observations"
+        ):
+            log.debug(f"Processing observation {obs.obs_id}")
             dataset = dataset_maker.run(reference.copy(), obs)
             if bkg_maker is not None:
                 dataset = bkg_maker.run(dataset, obs)
                 if dataset.counts_off is None:
-                    log.info(
+                    log.debug(
                         f"No OFF region found for observation {obs.obs_id}. Discarding."
                     )
                     continue
             dataset = safe_mask_maker.run(dataset, obs)
             log.debug(dataset)
             datasets.append(dataset)
-
         self.datasets = Datasets(datasets)
 
         if datasets_settings.stack:
             stacked = self.datasets.stack_reduce(name="stacked")
             self.datasets = Datasets([stacked])
-
-
 
     @staticmethod
     def _make_energy_axis(axis, name="energy"):

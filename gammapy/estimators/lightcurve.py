@@ -8,6 +8,8 @@ from gammapy.data import GTI
 from gammapy.datasets import Datasets
 from gammapy.utils.scripts import make_path
 from gammapy.utils.table import table_from_row_data
+from gammapy.utils.pbar import progress_bar
+from gammapy.modeling import Fit
 from .core import Estimator
 from .flux_point import FluxPoints, FluxPointsEstimator
 
@@ -334,14 +336,6 @@ class LightCurveEstimator(Estimator):
         Number of sigma to use for asymmetric error computation. Default is 1.
     n_sigma_ul : int
         Number of sigma to use for upper limit computation. Default is 2.
-    backend : str
-        Backend used for fitting, default : minuit
-    optimize_opts : dict
-        Options passed to `Fit.optimize`.
-    covariance_opts : dict
-        Options passed to `Fit.covariance`.
-    reoptimize : bool
-        reoptimize other parameters during fit statistic scan?
     selection_optional : list of str
         Which steps to execute. Available options are:
 
@@ -351,6 +345,10 @@ class LightCurveEstimator(Estimator):
             * "scan": estimate fit statistic profiles.
 
         Default is None so the optionnal steps are not executed.
+    fit : `Fit`
+        Fit instance specifying the backend and fit options.
+    reoptimize : bool
+        Re-optimize other free model parameters. Default is True.
     """
 
     tag = "LightCurveEstimator"
@@ -368,11 +366,9 @@ class LightCurveEstimator(Estimator):
         norm_values=None,
         n_sigma=1,
         n_sigma_ul=2,
-        backend="minuit",
-        optimize_opts=None,
-        covariance_opts=None,
-        reoptimize=False,
         selection_optional=None,
+        fit=None,
+        reoptimize=False,
     ):
 
         self.source = source
@@ -388,15 +384,13 @@ class LightCurveEstimator(Estimator):
         self.norm_values = norm_values
         self.n_sigma = n_sigma
         self.n_sigma_ul = n_sigma_ul
-        self.backend = backend
-        if optimize_opts is None:
-            optimize_opts = {}
-        if covariance_opts is None:
-            covariance_opts = {}
-        self.optimize_opts = optimize_opts
-        self.covariance_opts = covariance_opts
-        self.reoptimize = reoptimize
         self.selection_optional = selection_optional
+
+        if fit is None:
+            fit = Fit()
+
+        self.fit = fit
+        self.reoptimize = reoptimize
 
     def _flux_poins_estimator(self, energy_edges):
         return FluxPointsEstimator(
@@ -408,11 +402,9 @@ class LightCurveEstimator(Estimator):
             norm_values=self.norm_values,
             n_sigma=self.n_sigma,
             n_sigma_ul=self.n_sigma_ul,
-            backend=self.backend,
-            optimize_opts=self.optimize_opts,
-            covariance_opts=self.covariance_opts,
-            reoptimize=self.reoptimize,
             selection_optional=self.selection_optional,
+            fit=self.fit,
+            reoptimize=self.reoptimize
         )
 
     def run(self, datasets):
@@ -424,7 +416,6 @@ class LightCurveEstimator(Estimator):
         ----------
         datasets : list of `~gammapy.datasets.SpectrumDataset` or `~gammapy.datasets.MapDataset`
             Spectrum or Map datasets.
-
         Returns
         -------
         lightcurve : `~gammapy.estimators.LightCurve`
@@ -440,8 +431,10 @@ class LightCurveEstimator(Estimator):
         gti = gti.union(overlap_ok=False, merge_equal=False)
 
         rows = []
-
-        for t_min, t_max in gti.time_intervals:
+        for t_min, t_max in progress_bar(
+                gti.time_intervals,
+                desc="Time intervals"
+        ):
             datasets_to_fit = datasets.select_time(
                 t_min=t_min, t_max=t_max, atol=self.atol
             )
@@ -473,12 +466,6 @@ class LightCurveEstimator(Estimator):
         ----------
         datasets : `~gammapy.modeling.Datasets`
             the list of dataset object
-        backend : str
-            Backend used for fitting, default : minuit
-        optimize_opts : dict
-            Options passed to `Fit.optimize`.
-        covariance_opts : dict
-            Options passed to `Fit.covariance`.
 
         Returns
         -------

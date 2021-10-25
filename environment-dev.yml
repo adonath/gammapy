@@ -13,7 +13,7 @@ channels:
 
 dependencies:
   # core dependencies
-  - python==3.7
+  - python==3.9
   - pip
   - astropy
   - click
@@ -33,22 +33,21 @@ dependencies:
   - tqdm
   # extra dependencies
   - healpy
-  - iminuit<2.0
+  - iminuit
   - ipython
   - jupyter
   - jupyterlab
   - matplotlib
-  - naima
+  #- naima
   - pandas
-  - reproject
-  - sherpa
+  # - sherpa
   # dev dependencies
   - black
   - flake8
   - isort
   - nbsphinx
   - numdifftools
-  - pandoc
+  #- pandoc
   - pydocstyle
   - pylint
   - setuptools_scm

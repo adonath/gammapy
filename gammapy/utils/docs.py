@@ -25,6 +25,7 @@ from docutils.parsers.rst.directives.body import CodeBlock
 from docutils.parsers.rst.directives.images import Image
 from docutils.parsers.rst.directives.misc import Include, Raw
 from sphinx.util import logging
+from sphinx.util.docutils import SphinxDirective
 from gammapy.analysis import AnalysisConfig
 
 try:
@@ -41,6 +42,21 @@ conf = ConfigParser()
 conf.read(PATH_CFG / "setup.cfg")
 build_docs_cfg = dict(conf.items("build_docs"))
 PATH_NBS = build_docs_cfg["downloadable-notebooks"]
+
+
+class NbLinkGallery(SphinxDirective):
+    """Notebooks links gallery"""
+    has_content = True
+
+    def run(self):
+        path = Path(self.env.srcdir) / self.env.docname
+
+        for entry in self.content:
+            filename = path.parent / entry
+            if not filename.exists():
+                raise ValueError(f"Link to non-existent file {filename}")
+
+        return []
 
 
 class AccordionHeader(Directive):
@@ -167,6 +183,7 @@ class DocsImage(Image):
 
         return super().run()
 
+
 class SubstitutionCodeBlock(CodeBlock):
     """
     Similar to CodeBlock but replaces placeholders with variables.
@@ -189,6 +206,7 @@ class SubstitutionCodeBlock(CodeBlock):
         self.content = new_content
         return list(CodeBlock.run(self))
 
+
 def gammapy_sphinx_ext_activate():
     if HAS_GP_DATA:
         log.info(f"*** Found GAMMAPY_DATA = {gammapy_data_path}")
@@ -203,3 +221,4 @@ def gammapy_sphinx_ext_activate():
     register_directive("gp-howto-hli", HowtoHLI)
     register_directive("accordion-header", AccordionHeader)
     register_directive("accordion-footer", AccordionFooter)
+    register_directive("nblinkgallery", NbLinkGallery)

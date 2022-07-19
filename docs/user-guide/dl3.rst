@@ -165,7 +165,7 @@ Using gammapy.data
 
 Gammapy tutorial notebooks that show examples using ``gammapy.data``:
 
-.. nbgallery::
+.. nblinkgallery::
 
    ../tutorials/data/cta.ipynb
    ../tutorials/data/hess.ipynb

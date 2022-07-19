@@ -186,7 +186,8 @@ html_theme_options = {
         "json_url": "https://docs.gammapy.org/stable/switcher.json",
         "version_match": switch_version,
     },
-    "navbar_end": ["version-switcher", "navbar-icon-links"],
+    "navbar_start": ["navbar-logo", "version-switcher"],
+    "navbar_end": ["theme-switcher", "navbar-icon-links"],
 }
 
 # Theme style

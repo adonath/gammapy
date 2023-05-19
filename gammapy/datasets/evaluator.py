@@ -58,7 +58,6 @@ class MapEvaluator:
         evaluation_mode="local",
         use_cache=True,
     ):
-
         self.model = model
         self.exposure = exposure
         self.psf = psf

@@ -68,6 +68,7 @@ class PSFMap(IRFMap):
         psf_kernel = psf_map.get_psf_kernel(geom=geom)
     """
 
+    is_reco = False
     tag = "psf_map"
     required_axes = ["rad", "energy_true"]
 
@@ -556,6 +557,7 @@ class RecoPSFMap(PSFMap):
         Associated exposure map. Needs to have a consistent map geometry.
     """
 
+    is_reco = True
     tag = "psf_map_reco"
     required_axes = ["rad", "energy"]
 

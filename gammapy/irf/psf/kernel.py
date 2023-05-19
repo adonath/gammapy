@@ -80,6 +80,11 @@ class PSFKernel:
         """The map object holding the kernel (`~gammapy.maps.Map`)"""
         return self._psf_kernel_map
 
+    @property
+    def has_energy_axis(self):
+        """Whether the kernel has an energy axis"""
+        return "energy" in self.psf_kernel_map.geom.axes.names
+
     @classmethod
     def read(cls, *args, **kwargs):
         """Read kernel Map from file."""

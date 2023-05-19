@@ -3,10 +3,200 @@
 
 see :ref:`fit-statistics`
 """
+import collections
 import numpy as np
 from gammapy.stats.fit_statistics_cython import TRUNCATION_VALUE
+from .fit_statistics_cython import cash_sum_cython
 
 __all__ = ["cash", "cstat", "wstat", "get_wstat_mu_bkg", "get_wstat_gof_terms"]
+
+
+class FitStatistic:
+    """Fits statistic base class."""
+
+    pass
+
+
+class PriorFitStatistic(FitStatistic):
+    # collect all the priors from Models and evaluate them
+    def __init__(self, models):
+        self.models = models
+
+    def stat_sum(self, parameters=None):
+        if parameters:
+            self.models.parameters = parameters
+
+        stat_prior = 0
+
+        for model in self.models:
+            stat_prior += model.prior_log_prob(parameters)
+
+        return stat_prior
+
+
+class FitStatistic:
+    """Joint fit statistic."""
+
+    def __init__(self, statistics, weights=None):
+        self.statistics = statistics
+
+        if weights is None:
+            weights = np.ones(len(statistics))
+
+        self.weights = weights
+
+    def stat_sum(self, parameters):
+        """"""
+        stat = 0
+
+        for stat, weight in zip(self.statistics, self.weights):
+            stat += stat.stat_sum(parameters) * weight
+
+        return stat
+
+
+# Maybe we have...
+class DistributedJointFitStatistic:
+    pass
+
+
+# TODO: call this diffrently FitComponent?
+class CashFitStatistic(FitStatistic):
+    """Cash fit statistic."""
+
+    def __init__(self, counts, npred_models, mask=None):
+        if not counts.geom == npred_models.geom:
+            raise ValueError("Counts and npred_models must have the same geometry")
+
+        self.counts = counts
+        self.npred_model = npred_models
+
+        if mask is not None and counts.shape != mask.shape:
+            raise ValueError("Mask shape does not match counts shape")
+
+        self.mask = mask
+
+    @classmethod
+    def from_map_dataset(cls, models, dataset):
+        """"""
+        from gammapy.modeling.models.npred import NPredModels
+
+        npred_models = NPredModels.from_map_dataset(models=models, dataset=dataset)
+        counts = dataset.counts
+        return cls(counts=counts, npred_models=npred_models)
+
+    def peek(self):
+        # Plot counts, npred and residuals
+        raise NotImplementedError
+
+    # It seems unitiutive to have those here, but all the infomation is there!
+    def plot_residuals(self):
+        # Copy functionality from MapDataset.plot_residuals()
+        raise NotImplementedError
+
+    def residuals(self, method="diff"):
+        raise NotImplementedError
+
+    # passing parameters is probabay only needed for the fit interface
+    def stat_array(self, parameters=None):
+        raise NotImplementedError
+
+    def stat_sum(self, parameters=None, dataset=None):
+        """Total statistic function value given the current model parameters."""
+        counts = self.counts.data.astype(float)
+        npred = self.npred_model.evaluate(
+            parameters=parameters, dataset=dataset
+        ).data.astype(float)
+
+        if self.mask is not None:
+            return cash_sum_cython(counts[self.mask.data], npred[self.mask.data])
+        else:
+            return cash_sum_cython(counts.ravel(), npred.ravel())
+
+    def info_dict(self):
+        pass
+
+
+# Or alternatively
+class FitStatisticContext:
+    """Fit statistic handler."""
+
+    def __init__(self, counts, npred_models, mask=None, stat=None):
+        self.counts = counts
+        self.npred_models = npred_models
+        self.mask = mask
+        self.stat = stat
+
+    @classmethod
+    def from_dataset(cls, models, dataset):
+        """"""
+        npred_model = NPredModels.from_dataset(models, dataset)
+        counts = dataset.counts
+        return cls(counts=counts, cpunts=npred_model)
+
+    def peek(self):
+        pass
+
+    # It seems unitiutive to have thos here, but all the infomation is there!
+    def plot_residuals(self):
+        # Copy functionality from MapDataset.plot_residuals()
+        pass
+
+    def residuals(self):
+        pass
+
+    def stat_array(self, parameters=None):
+        self.stat.evaluate()
+
+    def stat_sum(self, parameters=None):
+        pass
+
+    @classmethod
+    def from_dataset(cls, models, dataset):
+        """"""
+        npred_model = NPredModels.from_dataset(models, dataset)
+        counts = dataset.counts
+        return cls(counts=counts, cpunts=npred_model)
+
+    def __enter__(self, dataset):
+        # maybe handle IRF updates here?
+        pass
+
+
+class WStatFitStatistic(CashFitStatistic):
+    """"""
+
+    def __init__(self, counts, counts_off, acceptance, acceptance_off, mask=None):
+        self.counts = counts
+        self.counts_off = counts_off
+        self.acceptance = acceptance
+        self.acceptance_off = acceptance_off
+
+    @classmethod
+    def from_dataset_on_off(cls, models, dataset):
+        return cls()
+
+    def alpha(self):
+        pass
+
+    def peek(self):
+        pass
+
+    def etc(self):
+        # Copy all the relevant functionality from MapDatasetOnOff
+        pass
+
+
+class Chi2FitStatistic(FitStatistic):
+    """"""
+
+    def __init__(self, flux_points, models, mask=None):
+        self.flux_points = flux_points
+        self.models = models
+        self.mask = mask
+
+    def stat_sum(self, parameters=None):
+        return super().stat_sum(parameters)
 
 
 def cash(n_on, mu_on, truncation_value=TRUNCATION_VALUE):

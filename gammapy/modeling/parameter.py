@@ -701,6 +701,21 @@ class Parameters(collections.abc.Sequence):
 
         return self[selection]
 
+    @property
+    def spectral(self):
+        """Select spectral parameters"""
+        return self.select(type="spectral")
+
+    @property
+    def spatial(self):
+        """Select spatial parameters"""
+        return self.select(type="spatial")
+
+    @property
+    def temporal(self):
+        """Select temporal parameters"""
+        return self.select(type="temporal")
+
     def freeze_all(self):
         """Freeze all parameters"""
         for par in self._parameters:
